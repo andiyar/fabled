@@ -86,6 +86,10 @@ public final class ChatSession: Identifiable {
     }
 
     public func respond(to request: PermissionRequest, decision: PermissionDecision) {
+        // A double-click (or a gate already abandoned by an aborted turn) must
+        // not forward a duplicate control_response to the CLI.
+        guard pendingPermissions.contains(where: { $0.requestID == request.requestID })
+        else { return }
         pendingPermissions.removeAll { $0.requestID == request.requestID }
         timeline = TimelineReducer.resolvePermission(
             timeline, requestID: request.requestID, decision: decision)
@@ -160,6 +164,10 @@ public final class ChatSession: Identifiable {
             turnsInFlight = max(0, turnsInFlight - 1)
             isWorking = turnsInFlight > 0
             isThinking = false
+            // An aborted turn (interrupt → error_during_execution) abandons any
+            // open permission gate — the CLI is no longer waiting for a decision.
+            // On normal completion the list is already empty, so this is a no-op.
+            pendingPermissions.removeAll()
             cumulativeCostUSD += turn.totalCostUSD ?? 0
             lastUsage = turn.usage
         case .streamEvent(let stream):

@@ -93,6 +93,28 @@ final class ChatSessionTests: XCTestCase {
         }
     }
 
+    func testAbortedTurnClearsPendingPermission() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git init"},"permission_suggestions":[]}}
+        """#)
+        await waitUntil("pending permission") { session.pendingPermission != nil }
+        XCTAssertEqual(session.activityState, .needsApproval)
+
+        // interrupt → error_during_execution abandons the open gate: the CLI
+        // is no longer waiting for a decision (fixtures/2026-07-09-interrupt.jsonl).
+        try yield(continuation, #"{"type":"result","subtype":"error_during_execution","is_error":true,"uuid":"r1"}"#)
+        await waitUntil("gate cleared") { session.pendingPermission == nil }
+        XCTAssertEqual(session.activityState, .idle)
+        let permissionItem = session.timeline.first {
+            if case .permission = $0 { return true } else { return false }
+        }
+        guard case .permission(_, _, let resolution) = permissionItem else {
+            return XCTFail("permission card must remain in the timeline")
+        }
+        XCTAssertNil(resolution, "abandoned gate stays unresolved-historical")
+    }
+
     func testTerminatedEndsSession() async throws {
         let (session, continuation, _) = makeSession()
         continuation.yield(.terminated(exitCode: 0))
