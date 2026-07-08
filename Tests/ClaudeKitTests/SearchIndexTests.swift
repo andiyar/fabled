@@ -134,4 +134,71 @@ final class SearchIndexTests: XCTestCase {
         let lineCount = try await index.indexedLineCount()
         XCTAssertEqual(lineCount, 0)
     }
+
+    // MARK: search (Task 9)
+
+    func testSearchFindsPromptAndAssistantLines() async throws {
+        try Fixtures.transcriptData("synthetic-edge-cases.jsonl")
+            .write(to: projectDir.appendingPathComponent("synthetic.jsonl"))
+        let (_, index) = try makeStoreAndIndex()
+        _ = try await index.reindex()
+
+        // "wombats" appears on line 6 (prompt) and line 9 (assistant reply).
+        let hits = try await index.search("wombats", limit: 10)
+        XCTAssertEqual(hits.count, 2)
+        XCTAssertEqual(Set(hits.map(\.lineNumber)), [6, 9])
+        for hit in hits {
+            XCTAssertTrue(hit.snippet.contains("[wombats]"), "snippet: \(hit.snippet)")
+            XCTAssertEqual(hit.session.id, "synthetic")
+            XCTAssertEqual(hit.session.title, "Synthetic custom title")
+            XCTAssertEqual(hit.session.project.flattenedName, "-test-project")
+            XCTAssertEqual(hit.session.fileURL.lastPathComponent, "synthetic.jsonl")
+            XCTAssertEqual(hit.id, "synthetic:\(hit.lineNumber)")
+        }
+    }
+
+    func testSearchPrefixMatchesLastToken() async throws {
+        try writeQuokkaSession()
+        let (_, index) = try makeStoreAndIndex()
+        _ = try await index.reindex()
+        let hits = try await index.search("quok", limit: 10)
+        XCTAssertEqual(hits.count, 2, "prefix star on the final token")
+    }
+
+    func testSearchMultiTokenIsImplicitAnd() async throws {
+        try writeQuokkaSession()
+        let (_, index) = try makeStoreAndIndex()
+        _ = try await index.reindex()
+        let both = try await index.search("feeding quokka", limit: 10)
+        XCTAssertEqual(both.count, 1)
+        let none = try await index.search("feeding nonexistentword", limit: 10)
+        XCTAssertEqual(none.count, 0)
+    }
+
+    func testSearchRespectsLimit() async throws {
+        try writeQuokkaSession()
+        let (_, index) = try makeStoreAndIndex()
+        _ = try await index.reindex()
+        let hits = try await index.search("quokka", limit: 1)
+        XCTAssertEqual(hits.count, 1)
+    }
+
+    func testHostileQueriesDoNotThrow() async throws {
+        try writeQuokkaSession()
+        let (_, index) = try makeStoreAndIndex()
+        _ = try await index.reindex()
+        for query in ["\"unbalanced AND (", "NOT", "a* b* OR", "\"\"\"", "   "] {
+            _ = try await index.search(query, limit: 10) // must not throw
+        }
+        let empty = try await index.search("", limit: 10)
+        XCTAssertEqual(empty.count, 0)
+    }
+
+    func testFTSQuerySanitizer() {
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "hello world"), "\"hello\" \"world\"*")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "one"), "\"one\"*")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: "  spaced   out  "), "\"spaced\" \"out\"*")
+        XCTAssertEqual(SearchIndex.ftsQuery(from: #"say "hi""#), #""say" ""hi""*"#)
+        XCTAssertEqual(SearchIndex.ftsQuery(from: ""), "")
+    }
 }

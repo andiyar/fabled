@@ -1,5 +1,23 @@
 import Foundation
 
+/// One full-text match. `lineNumber` is 1-based within the session file, so
+/// the UI can jump straight to the matching transcript entry.
+public struct SearchHit: Sendable, Identifiable {
+    /// "\(session.id):\(lineNumber)"
+    public let id: String
+    public let session: SessionSummary
+    /// FTS5 snippet with [ ] markers around matched terms.
+    public let snippet: String
+    public let lineNumber: Int
+
+    public init(id: String, session: SessionSummary, snippet: String, lineNumber: Int) {
+        self.id = id
+        self.session = session
+        self.snippet = snippet
+        self.lineNumber = lineNumber
+    }
+}
+
 /// Full-text index over every main session file, incremental by
 /// (path, mtime, size). SQLite FTS5 via the system library; the database
 /// lives wherever the app points `databaseURL` (Fabled will use
@@ -69,6 +87,76 @@ public actor SearchIndex {
             try remove(fileID: file.id)
         }
         return reindexed
+    }
+
+    /// Ranked full-text search. Hits are built entirely from index rows —
+    /// no session files are opened, so search stays fast even when hits
+    /// land in 50 MB transcripts.
+    public func search(_ query: String, limit: Int) async throws -> [SearchHit] {
+        let match = Self.ftsQuery(from: query)
+        guard !match.isEmpty, limit > 0 else { return [] }
+        let projectsByName = Dictionary(
+            uniqueKeysWithValues: try await store.projects().map { ($0.flattenedName, $0) })
+
+        // A wrap-only sanitizer keeps free text immune to FTS5 operators, but
+        // pathological quote runs can still yield an expression SQLite rejects
+        // ("unterminated string") when it parses the MATCH value at step time.
+        // Treat any such rejection as "no matches" rather than surfacing it.
+        do {
+            let statement = try db.prepare("""
+                SELECT files.path, files.session_id, files.project, files.mtime,
+                       files.size, files.title, lines.rowid,
+                       snippet(lines, 0, '[', ']', '…', 16)
+                FROM lines
+                JOIN files ON files.id = (lines.rowid >> 32)
+                WHERE lines MATCH ?
+                ORDER BY rank
+                LIMIT ?
+                """)
+            try statement.bind(1, match)
+            try statement.bind(2, Int64(limit))
+
+            var hits: [SearchHit] = []
+            while try statement.step() {
+                let path = statement.columnText(0)
+                let sessionID = statement.columnText(1)
+                let projectName = statement.columnText(2)
+                let fileURL = URL(fileURLWithPath: path)
+                let project = projectsByName[projectName] ?? ProjectFolder(
+                    flattenedName: projectName,
+                    originalPath: projectName,
+                    directoryURL: fileURL.deletingLastPathComponent())
+                let lineNumber = Int(statement.columnInt64(6) & 0xFFFF_FFFF)
+                let session = SessionSummary(
+                    id: sessionID,
+                    project: project,
+                    fileURL: fileURL,
+                    title: statement.columnIsNull(5) ? sessionID : statement.columnText(5),
+                    lastActivity: Date(timeIntervalSince1970: statement.columnDouble(3)),
+                    approximateSizeBytes: Int(statement.columnInt64(4)))
+                hits.append(SearchHit(
+                    id: "\(sessionID):\(lineNumber)",
+                    session: session,
+                    snippet: statement.columnText(7),
+                    lineNumber: lineNumber))
+            }
+            return hits
+        } catch is SQLiteError {
+            return []
+        }
+    }
+
+    /// Converts free-typed input into a safe FTS5 expression: each
+    /// whitespace-separated token is wrapped in double quotes so FTS5 treats
+    /// it as a literal phrase (immune to operator syntax like `AND`, `NOT`,
+    /// parens), the final one with a prefix star for as-you-type search.
+    static func ftsQuery(from userQuery: String) -> String {
+        let tokens = userQuery.split(whereSeparator: \.isWhitespace)
+        guard !tokens.isEmpty else { return "" }
+        return tokens.enumerated().map { offset, token in
+            let phrase = "\"\(token)\""
+            return offset == tokens.count - 1 ? phrase + "*" : phrase
+        }.joined(separator: " ")
     }
 
     private func indexFile(
