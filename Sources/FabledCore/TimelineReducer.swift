@@ -17,8 +17,28 @@ public enum TimelineReducer {
             for result in results { fillToolResult(&items, result) }
         case .systemInit, .system, .controlResponse:
             break  // ChatSession consumes these; nothing renders inline.
-        case .controlRequest, .result, .unknown, .terminated:
-            break  // Task 6 extends these.
+        case .controlRequest(let request):
+            if let permission = PermissionRequest(request) {
+                items.append(.permission(id: permission.requestID,
+                                         request: permission, resolution: nil))
+            }
+            // Non-permission control requests (hook_callback, mcp_message)
+            // are plumbing, not conversation — Plan 4 decides their UI.
+        case .result(let turn):
+            finalizeDanglingStreamText(&items)
+            items.append(.turnSummary(
+                id: turn.raw["uuid"]?.stringValue ?? "turn-\(items.count)",
+                result: turn))
+        case .unknown(let type, let raw):
+            items.append(.raw(id: raw["uuid"]?.stringValue ?? "raw-\(items.count)",
+                              type: type, raw: raw))
+        case .terminated(let exitCode):
+            finalizeDanglingStreamText(&items)
+            items.append(.notice(
+                id: "terminated",
+                text: exitCode == 0
+                    ? "Session ended."
+                    : "Session ended unexpectedly (exit code \(exitCode))."))
         }
         return items
     }
@@ -29,6 +49,45 @@ public enum TimelineReducer {
         _ items: [TimelineItem], id: String, text: String
     ) -> [TimelineItem] {
         items + [.userMessage(id: id, text: text)]
+    }
+
+    /// Records the user's decision on the matching (unresolved) card.
+    /// A local action, not a protocol event — the CLI never echoes it.
+    public static func resolvePermission(
+        _ items: [TimelineItem], requestID: String, decision: PermissionDecision
+    ) -> [TimelineItem] {
+        items.map { item in
+            if case .permission(let id, let request, nil) = item, id == requestID {
+                return .permission(id: id, request: request, resolution: decision)
+            }
+            return item
+        }
+    }
+
+    /// Read-only history: an on-disk transcript rendered through the same
+    /// vocabulary. Main-chain only — sidechain (subagent) traffic, titles,
+    /// and bookkeeping lines are not conversation.
+    public static func items(fromTranscript entries: [TranscriptEntry]) -> [TimelineItem] {
+        var items: [TimelineItem] = []
+        var lineIndex = 0
+        for entry in entries {
+            lineIndex += 1
+            switch entry {
+            case .userPrompt(let text, let context, _):
+                guard !context.isSidechain, !context.isMeta else { continue }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Machine-generated prompts (<command-name>…, caveats) are
+                // not conversation; same rule as title derivation.
+                guard !trimmed.isEmpty, !trimmed.hasPrefix("<") else { continue }
+                items = appendUserMessage(items, id: context.uuid ?? "line-\(lineIndex)", text: text)
+            case .event(let event, let context):
+                guard !context.isSidechain else { continue }
+                items = reduce(items, event)
+            case .title, .summary, .queueOperation, .attachment, .sessionMeta, .unknown:
+                continue
+            }
+        }
+        return items
     }
 
     // MARK: - Streaming deltas
@@ -80,6 +139,15 @@ public enum TimelineReducer {
             items[items.count - 1] = .assistantText(id: id, markdown: text, isStreaming: false)
         } else {
             items.append(.assistantText(id: fallbackID, markdown: text, isStreaming: false))
+        }
+    }
+
+    /// A turn that ends without a finalizing assistant message (interrupt,
+    /// error mid-stream) must not leave a streaming item for the next
+    /// turn's deltas to coalesce onto.
+    private static func finalizeDanglingStreamText(_ items: inout [TimelineItem]) {
+        if case .assistantText(let id, let markdown, true) = items.last {
+            items[items.count - 1] = .assistantText(id: id, markdown: markdown, isStreaming: false)
         }
     }
 
