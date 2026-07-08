@@ -28,4 +28,18 @@ enum Fixtures {
     static let futureEventLine = Data(#"""
     {"type":"hologram_projection","payload":{"x":1}}
     """#.utf8)
+
+    static var transcriptsDir: URL {
+        fixturesDir.appendingPathComponent("transcripts")
+    }
+
+    static func transcriptLines(_ name: String) throws -> [Data] {
+        let url = transcriptsDir.appendingPathComponent(name)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        return text.split(separator: "\n").map { Data($0.utf8) }
+    }
+
+    static func transcriptData(_ name: String) throws -> Data {
+        try Data(contentsOf: transcriptsDir.appendingPathComponent(name))
+    }
 }

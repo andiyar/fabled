@@ -2,7 +2,10 @@ import Foundation
 
 public enum AgentEventDecoder {
     public static func decode(_ line: Data) throws -> AgentEvent {
-        let raw = try JSONDecoder().decode(JSONValue.self, from: line)
+        try decode(raw: JSONDecoder().decode(JSONValue.self, from: line))
+    }
+
+    public static func decode(raw: JSONValue) -> AgentEvent {
         let type = raw["type"]?.stringValue ?? ""
         switch type {
         case "system":

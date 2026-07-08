@@ -66,3 +66,33 @@ extension JSONValue: Codable {
         }
     }
 }
+
+import Foundation
+
+extension JSONValue {
+    /// Bulk-parsing fast path used by transcript decoding, where whole
+    /// multi-MB session files are parsed line by line. JSONSerialization is
+    /// several times faster than JSONDecoder for this workload; the guard
+    /// test proves both paths produce identical values on every fixture.
+    public init(parsing data: Data) throws {
+        self = Self.bridge(try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]))
+    }
+
+    private static func bridge(_ object: Any) -> JSONValue {
+        switch object {
+        case let dictionary as [String: Any]:
+            return .object(dictionary.mapValues(bridge))
+        case let array as [Any]:
+            return .array(array.map(bridge))
+        case let string as String:
+            return .string(string)
+        case let number as NSNumber:
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return .bool(number.boolValue)
+            }
+            return .number(number.doubleValue)
+        default:
+            return .null
+        }
+    }
+}
