@@ -78,6 +78,18 @@ final class StreamEventTests: XCTestCase {
         }
     }
 
+    /// No probe fixture streams tool input, but Task 5's reducer consumes
+    /// this branch — pin the decode shape with a synthetic line.
+    func testInputJSONDeltaDecodes() throws {
+        let line = Data(#"""
+        {"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"comm"}},"session_id":"s1","uuid":"u1"}
+        """#.utf8)
+        guard case .streamEvent(let stream) = try AgentEventDecoder.decode(line) else {
+            return XCTFail("expected a stream event")
+        }
+        XCTAssertEqual(stream.kind, .inputJSONDelta(index: 2, partialJSON: #"{"comm"#))
+    }
+
     func testUnknownStreamEventKindsStayTolerant() throws {
         let line = Data(#"""
         {"type":"stream_event","event":{"type":"hologram_delta","index":0},"session_id":"s1","uuid":"u1"}
