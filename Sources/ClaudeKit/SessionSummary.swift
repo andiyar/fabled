@@ -112,3 +112,38 @@ enum SessionTitle {
         titleKeyPatterns.contains { line.range(of: $0) != nil }
     }
 }
+
+/// One session file on disk, cheaply summarized for list display.
+public struct SessionSummary: Sendable, Identifiable {
+    /// Session UUID (the filename stem).
+    public let id: String
+    public let project: ProjectFolder
+    public let fileURL: URL
+    /// Custom title > AI title > legacy summary > first prompt > session id.
+    public let title: String
+    /// File modification time.
+    public let lastActivity: Date
+    public let approximateSizeBytes: Int
+
+    public init(
+        id: String, project: ProjectFolder, fileURL: URL,
+        title: String, lastActivity: Date, approximateSizeBytes: Int
+    ) {
+        self.id = id
+        self.project = project
+        self.fileURL = fileURL
+        self.title = title
+        self.lastActivity = lastActivity
+        self.approximateSizeBytes = approximateSizeBytes
+    }
+}
+
+/// Enumeration record for one session file: everything list/index code needs
+/// without opening the file. Internal — SearchIndex and the watcher use it
+/// to avoid paying title derivation on every pass.
+struct SessionFileStamp: Sendable {
+    let url: URL
+    let sessionID: String
+    let modified: Date
+    let size: Int
+}
