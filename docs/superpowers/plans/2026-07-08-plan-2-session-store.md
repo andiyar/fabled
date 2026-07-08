@@ -1,6 +1,6 @@
 # SessionStore + History Search Implementation Plan (Fabled Plan 2 of 4)
 
-> **STATUS: READY FOR EXECUTION.** Expanded from `2026-07-08-plan-2-session-store-brief.md` after empirical probing of the full on-disk corpus (see "Probe findings"). Contract amendments vs the brief are listed below and ledgered in `DECISIONS.md`.
+> **STATUS: IMPLEMENTED on branch `claudekit-session-store` (2026-07-08), pending merge.** All 11 tasks executed subagent-driven with two-stage review per task; suite 102 tests green; all perf gates pass (transcript gate ledger-amended 500 ms → 1 s, see DECISIONS.md; deferred review findings in FOLLOWUPS.md). Expanded from `2026-07-08-plan-2-session-store-brief.md` after empirical probing of the full on-disk corpus (see "Probe findings"). Contract amendments vs the brief are listed below and ledgered in `DECISIONS.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -2900,13 +2900,13 @@ git commit -m "test: env-gated real-corpus performance gate with drift census"
 - [ ] PERF numbers from Task 11 recorded here:
 
 ```
-(fill in from Task 11 report)
-enumeration:
-transcript(largest):
-cold index:
-warm index:
-search:
-unknown census:
+(recorded 2026-07-08, release build, Ben's live corpus, 682 sessions / ~456 MB)
+enumeration:        682 sessions in 3.71 s   (gate < 5 s — cold-cache first run 5.04 s pre-optimization; passes after JSONLines slice fix)
+transcript(largest): 52,532,655 bytes, 16,211 entries in 645 ms  (gate amended 500 ms → 1 s, ledgered in DECISIONS.md; JSONSerialization+bridge bound, ~39 µs/line)
+cold index:         682 files in 7.55 s      (gate < 30 s)
+warm index:         0 files re-parsed in 7.0 ms (gate < 1 s)
+search:             50 hits in 4.4 ms        (no gate)
+unknown census:     92,875 lines, unknown types: [:] — zero unknown, zero malformed across the whole corpus
 ```
 
 - [ ] Unknown-census results triaged: new line types → extend `sessionMetaTypes` or fixtures if warranted, else leave as `.unknown` by design.

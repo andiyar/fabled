@@ -24,3 +24,21 @@ Deferred:
 - **Byte-by-byte stdout reads (M4).** Only if profiling shows it matters. → backlog.
 - **Blocking stderr drain pins a cooperative-pool thread per live session.** `Task.detached` + blocking `read(upToCount:)` for the child's lifetime is fine at Mac-app session counts; switch to `readabilityHandler` or `handle.bytes` if session counts grow. → backlog (with M4).
 - **Dead `Process` retained after termination (M5).** Harmless; tidy when touching the file. → backlog.
+
+## From Plan 2 reviews (2026-07-08, Tasks 1–11)
+
+Fixed in-task: out-of-window prompt leaking into titles via the title-key byte filter (Task 5); zombie watcher tasks + unfinished subscriber streams on store dealloc (Task 10); per-line `subdata` copies in `JSONLines` (Task 11 perf work).
+
+Deferred:
+
+- **`SearchIndex.reindex()` unsafe under overlapping invocation (Important).** `known` snapshots before the `await store.projects()` suspension; two interleaved passes can both see a new file as absent → `UNIQUE(path)` violation throws the whole pass. Add an in-flight coalescing/serializing guard *before* Plan 3 wires watcher→reindex. → Plan 3, early.
+- **File vanishing mid-reindex aborts the whole pass (Important).** `Data(contentsOf:)` sits outside the per-file transaction's catch; a session deleted between stamp enumeration and read throws out of `reindex()`, skipping remaining files and the vanished-file pruning. Catch and skip that file. → Plan 3 with the item above.
+- **Heavy file I/O on the SessionStore actor executor.** `sessions(in:)`/`transcript(for:)` read+scan multi-MB files inline; one large call serializes all store callers (watcher ticks, UI). Consider `nonisolated` reads off-actor when UI + watcher share the store. → Plan 3 design.
+- **`search()` error-swallow is broader than intended (Minor).** `prepare`/`bind` sit inside `catch is SQLiteError → []`, so schema corruption reads as empty results; narrow the catch to the `step()` loop. → Plan 3 polish.
+- **`changes` AsyncStream buffers unbounded (Minor).** Slow consumer accumulates batches; consumers only need the latest — consider `.bufferingNewest(n)`. → Plan 3, with the Plan 1 M1 twin.
+- **`performScheduledRescan` enumerates `projects()` twice per tick (Minor perf).** Once inside `currentSnapshot()`, once for new-dir watching; capture one listing. → backlog.
+- **`projectCache` freezes `originalPath` at first sight (Minor).** A project unresolvable at first enumeration stays flattened forever even if the cwd later exists. Doc or re-resolve on miss. → backlog.
+- **`maxTitleLineBytes` cutoff untested (Minor test gap).** A >4096-byte title line being skipped has no pinning test. → backlog.
+- **mmap truncation edge (note).** `.mappedIfSafe` + a writer truncating/replacing a mapped session file ⇒ SIGBUS. Safe today (CLI appends only); revisit if any tooling rewrites session files.
+- **`ftsQuery` wrap-only quoting (note).** A token with an interior `"` can't match a literal quote (degrades to no-results via the narrow catch). Accepted; plan doc's "quotes are doubled" text is stale — the tests mandate wrap-only.
+- **`SearchHit` not Equatable/Hashable (note).** Add via extension if Plan 3 diffing needs it.
