@@ -61,6 +61,33 @@ func makeFakeConnection()
     return (connection, continuation, recorder)
 }
 
+enum CorpusBuilder {
+    /// A temp ~/.claude/projects-shaped tree built from the transcript
+    /// fixtures, with staggered mtimes (tooluse newest … titled oldest).
+    static func make() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corpus-\(UUID().uuidString)")
+        let project = root.appendingPathComponent("-tmp-fabled-demo")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let fixtures = [
+            ("real-titled-session", "97c70bda-ac5d-4e12-982e-8e6e35dd2674", -3.0),
+            ("real-untitled-session", "036b246d-0898-4ace-89b2-8fdd6c107fc4", -2.0),
+            ("real-tooluse-session", "21feb0f8-e41a-4f72-9efb-9232b5bb64de", -1.0),
+        ]
+        for (fixture, sessionID, minutesAgo) in fixtures {
+            let destination = project.appendingPathComponent("\(sessionID).jsonl")
+            try FileManager.default.copyItem(
+                at: CoreFixtures.fixturesDir
+                    .appendingPathComponent("transcripts/\(fixture).jsonl"),
+                to: destination)
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date(timeIntervalSinceNow: minutesAgo * 60)],
+                ofItemAtPath: destination.path)
+        }
+        return root
+    }
+}
+
 /// Polls a MainActor condition until it holds or the test fails.
 @MainActor
 func waitUntil(
