@@ -14,4 +14,5 @@ Deferred:
 - **SIGTERM-only terminate (M2).** No SIGKILL escalation; a stuck child never dies. Add kill-after-timeout. → Plan 4 (session management).
 - **`events` before `start()` returns a dead placeholder stream; `alreadyStarted` is a misleading error after natural exit (M3).** Sharpen docs or API when ChatSession wraps it. → Plan 3.
 - **Byte-by-byte stdout reads (M4).** Only if profiling shows it matters. → backlog.
+- **Blocking stderr drain pins a cooperative-pool thread per live session.** `Task.detached` + blocking `read(upToCount:)` for the child's lifetime is fine at Mac-app session counts; switch to `readabilityHandler` or `handle.bytes` if session counts grow. → backlog (with M4).
 - **Dead `Process` retained after termination (M5).** Harmless; tidy when touching the file. → backlog.

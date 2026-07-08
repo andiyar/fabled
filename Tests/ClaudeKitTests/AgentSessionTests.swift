@@ -18,6 +18,7 @@ final class AgentSessionTests: XCTestCase {
           echo "$line" >> '\(capture.path)'
           if [[ "$line" == *'"type":"user"'* ]]; then
             echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"pong"}]},"session_id":"s1"}'
+            for i in $(seq 1 2000); do echo '{"type":"system","subtype":"filler"}'; done
             echo '{"type":"result","subtype":"success","is_error":false,"session_id":"s1"}'
             exit 0
           fi
