@@ -17,6 +17,15 @@ The Electron desktop app carries bundled-Chromium costs: RAM usage, stalls, non-
 - **Platform:** macOS 15+, Swift 6, SwiftUI.
 - **MCP management:** conversational (the agent edits its own config); no dedicated connector UI. OAuth flows open the browser.
 
+## Implementation strategy
+
+To conserve Fable credit, Fable (Claude Fable 5) acts as coordinator and Opus subagents do the implementation. This shapes the plan, not just the process:
+
+- **Task granularity:** the implementation plan decomposes into small, self-contained tasks — explicit file lists, defined interfaces, acceptance criteria an agent can verify itself (`swift build` / `swift test`). Opus performs best with tight scope and structure (conventions in `~/Developer/fable-kit/`).
+- **Fixture-driven verification:** every ClaudeKit protocol task ships with recorded fixtures and tests, so a subagent can prove its own work green before handing back — review burden stays low.
+- **Coordinator reserves:** architecture decisions, protocol codec design, task specification, review of subagent output, and integration debugging stay with Fable. Interfaces between parallel tasks are defined up front by the coordinator so subagents don't collide.
+- **Contract-first order:** ClaudeKit's public API is designed and stubbed early (by the coordinator) so UI tasks and engine tasks can proceed in parallel against agreed types.
+
 ## Verified protocol facts (tested 2026-07-08 against CLI 2.1.202)
 
 All of the following were verified empirically on this machine, not assumed:
