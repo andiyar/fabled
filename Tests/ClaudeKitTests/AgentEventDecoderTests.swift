@@ -88,4 +88,30 @@ final class AgentEventDecoderTests: XCTestCase {
             }
         }
     }
+
+    func testDecodesCanUseToolControlRequest() throws {
+        let line = Data(#"""
+        {"type":"control_request","request_id":"4565ced1-e35b-4fbc-bb6a-c87dc03b4747","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"git init","description":"Initialize a new git repository"},"description":"Initialize a new git repository","permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"git init *"}],"behavior":"allow","destination":"localSettings"}],"decision_reason":"This command requires approval"}}
+        """#.utf8)
+        guard case .controlRequest(let req) = try AgentEventDecoder.decode(line) else {
+            return XCTFail("expected controlRequest")
+        }
+        XCTAssertEqual(req.requestID, "4565ced1-e35b-4fbc-bb6a-c87dc03b4747")
+        XCTAssertEqual(req.subtype, "can_use_tool")
+        let perm = try XCTUnwrap(PermissionRequest(req))
+        XCTAssertEqual(perm.toolName, "Bash")
+        XCTAssertEqual(perm.input["command"]?.stringValue, "git init")
+        XCTAssertEqual(perm.suggestions.count, 1)
+    }
+
+    func testDecodesControlResponse() throws {
+        let line = Data(#"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init-1","response":{"commands":[{"name":"review","description":"Review a PR","argumentHint":""}]}}}
+        """#.utf8)
+        guard case .controlResponse(let resp) = try AgentEventDecoder.decode(line) else {
+            return XCTFail("expected controlResponse")
+        }
+        XCTAssertEqual(resp.requestID, "init-1")
+        XCTAssertEqual(resp.payload?["commands"]?.arrayValue?.count, 1)
+    }
 }

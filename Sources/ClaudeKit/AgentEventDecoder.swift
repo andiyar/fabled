@@ -40,6 +40,17 @@ public enum AgentEventDecoder {
                 raw: raw))
         case "rate_limit_event":
             return .system(subtype: "rate_limit_event", raw: raw)
+        case "control_request":
+            return .controlRequest(ControlRequest(
+                requestID: raw["request_id"]?.stringValue ?? "",
+                subtype: raw["request"]?["subtype"]?.stringValue ?? "",
+                payload: raw["request"] ?? .null))
+        case "control_response":
+            let response = raw["response"]
+            return .controlResponse(ControlResponseEnvelope(
+                requestID: response?["request_id"]?.stringValue ?? "",
+                subtype: response?["subtype"]?.stringValue ?? "",
+                payload: response?["response"]))
         default:
             return .unknown(type: type, raw: raw)
         }
