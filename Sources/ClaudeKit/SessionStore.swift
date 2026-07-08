@@ -33,6 +33,20 @@ public actor SessionStore {
         self.pollInterval = pollInterval
     }
 
+    /// Watcher tasks hold `self` weakly, so they don't keep the store alive —
+    /// but nothing else cancels them if the owner drops the store while
+    /// subscribers are still consuming. Kill them here. The kqueue sources
+    /// need no explicit cancel: `watcher` is solely owned by the store, so
+    /// it deallocates with us and its own deinit runs cancelAll() (a
+    /// nonisolated deinit can't touch the non-Sendable property anyway).
+    deinit {
+        pollTask?.cancel()
+        rescanTask?.cancel()
+        // Dropping a Continuation does NOT finish its stream — do it
+        // explicitly or consumers hang forever on a dead store.
+        for continuation in subscribers.values { continuation.finish() }
+    }
+
     /// Project folders sorted by flattened name. A missing root is an empty
     /// store, not an error (fresh machines have no ~/.claude/projects).
     public func projects() throws -> [ProjectFolder] {
@@ -153,7 +167,10 @@ public actor SessionStore {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: interval)
-                await self?.scheduleRescan()
+                // Break, don't just skip: if the store is gone the loop must
+                // die too, or repeated store create/drop cycles leak spinners.
+                guard let self else { break }
+                await self.scheduleRescan()
             }
         }
     }

@@ -137,4 +137,32 @@ final class SessionWatcherTests: XCTestCase {
         let released = await waitUntil { await store.subscriberCount == 0 }
         XCTAssertTrue(released, "cancelled consumers must unsubscribe")
     }
+
+    /// Pins the dealloc path: dropping the store's last owner while a
+    /// subscriber is still consuming must deallocate the store (watcher
+    /// tasks hold it weakly) and finish the subscriber's stream, rather
+    /// than leaving a zombie poll loop spinning forever.
+    func testStoreDeallocationFinishesStreamsAndKillsWatcherTasks() async throws {
+        let collector = BatchCollector()
+        weak var weakStore: SessionStore?
+        let stream: AsyncStream<[URL]>
+        do {
+            let store = makeStore()
+            weakStore = store
+            stream = await store.changes
+        }
+        // Last strong reference is gone; watcher tasks must not resurrect it.
+        let consumer = Task {
+            for await batch in stream { await collector.append(batch) }
+            await collector.append([])  // sentinel: stream finished
+        }
+        defer { consumer.cancel() }
+
+        let deallocated = await waitUntil { weakStore == nil }
+        XCTAssertTrue(deallocated, "watcher tasks must not keep the store alive")
+        let finished = await waitUntil {
+            await collector.batches.last?.isEmpty == true
+        }
+        XCTAssertTrue(finished, "stream must finish when the store is deallocated")
+    }
 }
