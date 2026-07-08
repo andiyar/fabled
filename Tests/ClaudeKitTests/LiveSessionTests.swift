@@ -111,4 +111,29 @@ final class LiveSessionTests: XCTestCase {
             atPath: scratch.appendingPathComponent(".git").path),
             "the allowed tool must actually have run")
     }
+
+    func testLiveStreamDeltasArrive() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["CLAUDEKIT_LIVE"] == "1",
+                          "live test — set CLAUDEKIT_LIVE=1 to run")
+        var config = SessionConfiguration(
+            workingDirectory: FileManager.default.temporaryDirectory)
+        config.model = "haiku"
+        config.extraArguments = ["--setting-sources", ""]
+        let session = AgentSession(configuration: config)
+        try await session.start()
+        await session.send("Reply with one short sentence about rivers.")
+
+        var sawTextDelta = false
+        for await event in await session.events {
+            switch event {
+            case .streamEvent(let stream):
+                if case .textDelta = stream.kind { sawTextDelta = true }
+            case .result:
+                await session.terminate()
+            default:
+                break
+            }
+        }
+        XCTAssertTrue(sawTextDelta, "partial messages must produce text deltas")
+    }
 }

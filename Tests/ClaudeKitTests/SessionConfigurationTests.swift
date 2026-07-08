@@ -10,7 +10,16 @@ final class SessionConfigurationTests: XCTestCase {
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--permission-prompt-tool", "stdio",
+            "--include-partial-messages",
         ])
+    }
+
+    func testIncludePartialMessagesFlag() {
+        var config = SessionConfiguration(workingDirectory: URL(fileURLWithPath: "/tmp"))
+        XCTAssertTrue(config.arguments().contains("--include-partial-messages"),
+                      "streaming deltas are on by default — Fabled always wants them")
+        config.includePartialMessages = false
+        XCTAssertFalse(config.arguments().contains("--include-partial-messages"))
     }
 
     func testAllOptions() {

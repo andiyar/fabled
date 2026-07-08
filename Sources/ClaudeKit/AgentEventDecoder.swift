@@ -54,9 +54,53 @@ public enum AgentEventDecoder {
                 requestID: response?["request_id"]?.stringValue ?? "",
                 subtype: response?["subtype"]?.stringValue ?? "",
                 payload: response?["response"]))
+        case "stream_event":
+            return .streamEvent(Self.streamEvent(from: raw))
         default:
             return .unknown(type: type, raw: raw)
         }
+    }
+
+    static func streamEvent(from raw: JSONValue) -> StreamEvent {
+        let event = raw["event"]
+        let type = event?["type"]?.stringValue ?? ""
+        let index = (event?["index"]?.doubleValue).map(Int.init) ?? 0
+        let kind: StreamEvent.Kind
+        switch type {
+        case "message_start":
+            kind = .messageStart
+        case "content_block_start":
+            kind = .contentBlockStart(
+                index: index, block: contentBlock(event?["content_block"] ?? .null))
+        case "content_block_delta":
+            switch event?["delta"]?["type"]?.stringValue {
+            case "text_delta":
+                kind = .textDelta(index: index,
+                                  text: event?["delta"]?["text"]?.stringValue ?? "")
+            case "thinking_delta":
+                kind = .thinkingDelta(index: index,
+                                      thinking: event?["delta"]?["thinking"]?.stringValue ?? "")
+            case "input_json_delta":
+                kind = .inputJSONDelta(index: index,
+                                       partialJSON: event?["delta"]?["partial_json"]?.stringValue ?? "")
+            case let deltaType:
+                kind = .other(type: "content_block_delta/\(deltaType ?? "")")
+            }
+        case "content_block_stop":
+            kind = .contentBlockStop(index: index)
+        case "message_delta":
+            kind = .messageDelta(stopReason: event?["delta"]?["stop_reason"]?.stringValue)
+        case "message_stop":
+            kind = .messageStop
+        default:
+            kind = .other(type: type)
+        }
+        return StreamEvent(
+            kind: kind,
+            sessionID: raw["session_id"]?.stringValue,
+            parentToolUseID: raw["parent_tool_use_id"]?.stringValue,
+            uuid: raw["uuid"]?.stringValue,
+            raw: raw)
     }
 
     static func contentBlock(_ block: JSONValue) -> ContentBlock {

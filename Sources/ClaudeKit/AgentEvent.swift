@@ -19,8 +19,34 @@ public enum AgentEvent: Sendable, Equatable {
     case result(TurnResult)
     case controlRequest(ControlRequest)
     case controlResponse(ControlResponseEnvelope)
+    case streamEvent(StreamEvent)
     case unknown(type: String, raw: JSONValue)
     case terminated(exitCode: Int32)
+}
+
+/// One `stream_event` line: an Anthropic SSE event wrapped with session
+/// routing. Shape recorded 2026-07-09 (fixtures/2026-07-09-partial-messages.jsonl):
+/// {"type":"stream_event","event":{…},"session_id":…,"parent_tool_use_id":…,"uuid":…}
+public struct StreamEvent: Sendable, Equatable {
+    public enum Kind: Sendable, Equatable {
+        case messageStart
+        case contentBlockStart(index: Int, block: ContentBlock)
+        case textDelta(index: Int, text: String)
+        case thinkingDelta(index: Int, thinking: String)
+        case inputJSONDelta(index: Int, partialJSON: String)
+        case contentBlockStop(index: Int)
+        case messageDelta(stopReason: String?)
+        case messageStop
+        /// Tolerant fallback — signature_delta lands here today, and so will
+        /// whatever the API adds next. Never a decode failure.
+        case other(type: String)
+    }
+
+    public let kind: Kind
+    public let sessionID: String?
+    public let parentToolUseID: String?
+    public let uuid: String?
+    public let raw: JSONValue
 }
 
 public struct ControlRequest: Sendable, Equatable {
