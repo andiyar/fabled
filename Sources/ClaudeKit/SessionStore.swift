@@ -11,6 +11,19 @@ public actor SessionStore {
     /// enumeration (rescans, reindexes) doesn't redo it.
     private var projectCache: [String: ProjectFolder] = [:]
 
+    // MARK: change watching
+
+    private var subscribers: [UUID: AsyncStream<[URL]>.Continuation] = [:]
+    private var watcher: DirectoryWatcher?
+    private var pollTask: Task<Void, Never>?
+    private var rescanTask: Task<Void, Never>?
+    private var snapshot: [String: FileStamp] = [:]
+
+    struct FileStamp: Equatable {
+        let mtime: Date
+        let size: Int
+    }
+
     public init(
         projectsRoot: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects"),
@@ -98,5 +111,104 @@ public actor SessionStore {
                 size: values.fileSize ?? 0))
         }
         return stamps
+    }
+
+    /// Fires on any session-file change under projectsRoot (create, append,
+    /// delete, rename), throttled to at most one batch per 250 ms. Payload =
+    /// affected session file URLs. Each access returns an independent
+    /// stream; watching starts on first access and stops when the last
+    /// subscriber cancels.
+    public var changes: AsyncStream<[URL]> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<[URL]>.makeStream()
+        subscribers[id] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeSubscriber(id) }
+        }
+        startWatchingIfNeeded()
+        return stream
+    }
+
+    /// Internal, for tests.
+    var subscriberCount: Int { subscribers.count }
+
+    private func removeSubscriber(_ id: UUID) {
+        subscribers[id] = nil
+        if subscribers.isEmpty { stopWatching() }
+    }
+
+    private func startWatchingIfNeeded() {
+        guard watcher == nil else { return }
+        snapshot = (try? currentSnapshot()) ?? [:]
+        let newWatcher = DirectoryWatcher(onEvent: { [weak self] in
+            Task { await self?.scheduleRescan() }
+        })
+        newWatcher.watch(directoryAt: projectsRoot.path)
+        for project in (try? projects()) ?? [] {
+            newWatcher.watch(directoryAt: project.directoryURL.path)
+        }
+        watcher = newWatcher
+
+        let interval = pollInterval
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                await self?.scheduleRescan()
+            }
+        }
+    }
+
+    private func stopWatching() {
+        watcher?.cancelAll()
+        watcher = nil
+        pollTask?.cancel()
+        pollTask = nil
+        rescanTask?.cancel()
+        rescanTask = nil
+    }
+
+    /// Throttle, not restartable debounce: kqueue bursts and poll ticks
+    /// coalesce into one rescan at most every 250 ms, and a steady signal
+    /// stream can never starve the rescan.
+    private func scheduleRescan() {
+        guard watcher != nil, rescanTask == nil else { return }
+        rescanTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await self?.performScheduledRescan()
+        }
+    }
+
+    private func performScheduledRescan() {
+        rescanTask = nil
+        guard !subscribers.isEmpty else { return }
+        let current = (try? currentSnapshot()) ?? snapshot
+        var changed: [URL] = []
+        for (path, stamp) in current where snapshot[path] != stamp {
+            changed.append(URL(fileURLWithPath: path))
+        }
+        for path in snapshot.keys where current[path] == nil {
+            changed.append(URL(fileURLWithPath: path))
+        }
+        snapshot = current
+        // Newly created project directories need their own kqueue source.
+        for project in (try? projects()) ?? [] {
+            watcher?.watch(directoryAt: project.directoryURL.path)
+        }
+        guard !changed.isEmpty else { return }
+        let batch = changed.sorted { $0.path < $1.path }
+        for continuation in subscribers.values {
+            continuation.yield(batch)
+        }
+    }
+
+    private func currentSnapshot() throws -> [String: FileStamp] {
+        var result: [String: FileStamp] = [:]
+        for project in try projects() {
+            for stamp in (try? sessionFileStamps(in: project)) ?? [] {
+                result[stamp.url.path] = FileStamp(mtime: stamp.modified, size: stamp.size)
+            }
+        }
+        return result
     }
 }
