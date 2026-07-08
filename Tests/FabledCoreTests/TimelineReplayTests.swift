@@ -168,6 +168,30 @@ final class TimelineReplayTests: XCTestCase {
         guard case .userMessage = items.first else { return XCTFail("\(items.first.debugDescription)") }
     }
 
+    func testSyntheticEdgeCasesTranscriptReplay() throws {
+        let items = TimelineReducer.items(
+            fromTranscript: try CoreFixtures.transcript("synthetic-edge-cases.jsonl"))
+        let c = census(items)
+        // Counts pinned from a manual line-by-line census of the fixture
+        // (2026-07-09). The three kept user lines: the compact-summary
+        // continuation (isCompactSummary is NOT a drop rule — only
+        // sidechain/meta are), the plain prompt, and the text+image block
+        // prompt (image block contributes no text). Dropped: the sidechain
+        // subagent prompt, the isMeta <command-name> echo, all titles,
+        // queue/attachment/session-meta bookkeeping. The orphan tool_result
+        // (line 8) matches no tool call and renders nothing.
+        XCTAssertEqual(c.user, 3)
+        XCTAssertEqual(c.text, 1)
+        XCTAssertEqual(c.tool, 0)
+        XCTAssertEqual(c.toolWithResult, 0)
+        XCTAssertEqual(c.permission, 0)
+        XCTAssertEqual(c.notice, 0)
+        XCTAssertEqual(c.turn, 0,
+            "the on-disk result line is a subagent cache (key + agentId), never a turn summary")
+        XCTAssertEqual(c.raw, 0,
+            "unknown top-level line types route to TranscriptEntry.unknown and are dropped")
+    }
+
     func testUntitledTranscriptReplay() throws {
         let items = TimelineReducer.items(
             fromTranscript: try CoreFixtures.transcript("real-untitled-session.jsonl"))
