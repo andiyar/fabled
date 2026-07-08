@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/fabled-icon-256.png" alt="Fabled" width="160" />
+
 # Fabled
 
 *A native Apple Silicon Mac client for Claude Code.*
