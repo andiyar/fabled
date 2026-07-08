@@ -49,10 +49,17 @@ public actor AgentSession {
         do {
             try process.run()
         } catch {
+            continuation.finish()
+            self.continuation = nil
             throw SessionError.launchFailed(String(describing: error))
         }
         self.process = process
         self.stdinPipe = stdin
+
+        Task.detached {
+            let handle = stderr.fileHandleForReading
+            while let chunk = try? handle.read(upToCount: 65536), !chunk.isEmpty {}
+        }
 
         readTask = Task { [weak self] in
             do {
@@ -108,10 +115,11 @@ public actor AgentSession {
         continuation?.yield(event)
     }
 
-    private func handleTermination(exitCode: Int32) {
+    private func handleTermination(exitCode: Int32) async {
+        await readTask?.value
         continuation?.yield(.terminated(exitCode: exitCode))
         continuation?.finish()
         continuation = nil
-        readTask?.cancel()
+        readTask = nil
     }
 }

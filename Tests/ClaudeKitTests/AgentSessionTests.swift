@@ -42,18 +42,29 @@ final class AgentSessionTests: XCTestCase {
         var sawInit = false
         var texts: [String] = []
         var terminated = false
+        var order: [String] = []
         for await event in await session.events {
             switch event {
-            case .systemInit: sawInit = true
+            case .systemInit:
+                sawInit = true
+                order.append("init")
             case .assistant(let msg):
+                order.append("assistant")
                 for case .text(let t) in msg.content { texts.append(t) }
-            case .terminated: terminated = true
-            default: break
+            case .result:
+                order.append("result")
+            case .terminated:
+                terminated = true
+                order.append("terminated")
+            default:
+                order.append("other")
             }
         }
         XCTAssertTrue(sawInit)
         XCTAssertEqual(texts, ["pong"])
         XCTAssertTrue(terminated)
+        XCTAssertEqual(Array(order.suffix(2)), ["result", "terminated"],
+                       "final events buffered at exit must not be dropped")
 
         let written = try String(contentsOf: capture, encoding: .utf8)
         XCTAssertTrue(written.contains(#""subtype":"initialize""#),
