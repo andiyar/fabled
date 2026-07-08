@@ -11,7 +11,7 @@ public struct SystemInit: Sendable, Equatable {
     public let raw: JSONValue
 }
 
-public enum AgentEvent: Sendable {
+public enum AgentEvent: Sendable, Equatable {
     case systemInit(SystemInit)
     case system(subtype: String, raw: JSONValue)
     case assistant(AssistantMessage)
