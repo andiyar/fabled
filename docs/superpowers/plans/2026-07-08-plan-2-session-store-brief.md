@@ -1,6 +1,6 @@
 # Plan 2 brief: SessionStore + history search
 
-**Status:** design brief — expand with superpowers:writing-plans before implementing (see `../COORDINATION.md`).
+**Status:** EXPANDED 2026-07-08 → full plan at `2026-07-08-plan-2-session-store.md` (contract amendments ledgered in `../DECISIONS.md`). This brief is retained for history; work from the full plan.
 **Prerequisite:** Plan 1 complete (`ClaudeKit` builds, all tests green).
 **Goal:** Read, watch, and search every Claude Code session on disk (`~/.claude/projects/**/*.jsonl`) with zero CLI processes. This is the data layer for the sidebar and the session browser.
 
