@@ -20,6 +20,7 @@ public enum AgentEvent: Sendable {
     case controlRequest(ControlRequest)
     case controlResponse(ControlResponseEnvelope)
     case unknown(type: String, raw: JSONValue)
+    case terminated(exitCode: Int32)
 }
 
 public struct ControlRequest: Sendable, Equatable {
