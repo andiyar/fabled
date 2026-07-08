@@ -85,6 +85,16 @@ final class OutboundTests: XCTestCase {
         XCTAssertEqual(decoded["response"]?["response"]?["updatedInput"], edited)
     }
 
+    func testAllowWithNullRequestedInputFallsBackToEmptyObject() throws {
+        // A request with no input key decodes as .null (PermissionRequest.input
+        // default); the CLI's Zod schema requires a record for updatedInput,
+        // so the fallback must be {} — never null.
+        let data = Outbound.permissionResponse(
+            requestID: "r1", decision: .allowAsRequested, requestedInput: .null)
+        let decoded = try JSONValue(parsing: data)
+        XCTAssertEqual(decoded["response"]?["response"]?["updatedInput"], .object([:]))
+    }
+
     func testDenyStillOmitsInputFields() throws {
         let data = Outbound.permissionResponse(
             requestID: "r1", decision: .deny(message: "not now"),

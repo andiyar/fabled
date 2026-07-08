@@ -119,6 +119,9 @@ public actor AgentSession {
     }
 
     public func terminate() {
+        // Short-circuit writes immediately: between an intentional terminate()
+        // and handleTermination the pipe can die and a write would SIGPIPE.
+        isTerminated = true
         process?.terminate()
     }
 

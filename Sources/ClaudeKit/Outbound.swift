@@ -56,9 +56,11 @@ public enum Outbound {
         var inner: [String: JSONValue]
         switch decision {
         case .allow(let updatedInput, let updatedPermissions):
+            // Inputless requests decode as .null; Zod requires a record, so map null → {}.
+            let fallback = requestedInput == .null ? JSONValue.object([:]) : requestedInput
             inner = [
                 "behavior": .string("allow"),
-                "updatedInput": updatedInput ?? requestedInput,
+                "updatedInput": updatedInput ?? fallback,
             ]
             if let updatedPermissions, !updatedPermissions.isEmpty {
                 inner["updatedPermissions"] = .array(updatedPermissions)
