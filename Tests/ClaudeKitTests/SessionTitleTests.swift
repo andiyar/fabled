@@ -127,4 +127,17 @@ final class SessionTitleTests: XCTestCase {
         // Documented cutoff: prompts are only sought in the first 100 lines.
         XCTAssertNil(SessionTitle.derive(fromFileData: Data(fileText.utf8)))
     }
+
+    func testPromptContainingTitleKeyBeyondScanWindowYieldsNil() throws {
+        // A user line past the window whose raw bytes contain a title-key
+        // pattern trips the byte filter and gets decoded — but must still not
+        // become the first-prompt fallback. Note the key must appear OUTSIDE
+        // string content: quotes inside content are escaped (\"customTitle\"),
+        // which never matches the quoted byte patterns.
+        let filler = #"{"type":"queue-operation","operation":"enqueue","sessionId":"s"}"#
+        let trojan = #"{"isSidechain":false,"type":"user","customTitle":"stray","message":{"role":"user","content":"a usable prompt past the window"}}"#
+        var fileText = Array(repeating: filler, count: 150).joined(separator: "\n")
+        fileText += "\n" + trojan + "\n"
+        XCTAssertNil(SessionTitle.derive(fromFileData: Data(fileText.utf8)))
+    }
 }

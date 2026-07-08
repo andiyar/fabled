@@ -99,6 +99,10 @@ enum SessionTitle {
             let parseForTitle = line.count <= maxTitleLineBytes && containsTitleKey(line)
             guard parseForPrompt || parseForTitle,
                   let entry = try? TranscriptDecoder.decode(line) else { continue }
+            // A prompt line past the scan window can still be decoded when the
+            // byte filter fires (title-key bytes elsewhere on a user line);
+            // never let it become the first-prompt fallback.
+            if case .userPrompt = entry, !parseForPrompt { continue }
             accumulator.consume(entry)
         }
         return accumulator.best
