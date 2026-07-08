@@ -54,11 +54,27 @@ public actor SearchIndex {
         let size: Int64
     }
 
+    private var reindexChain: Task<Int, any Error>?
+
     /// Walks every project; parses only files whose (mtime, size) changed;
     /// drops index rows for files that vanished. Returns the number of
     /// files (re)parsed — 0 on a warm no-change pass.
+    ///
+    /// Overlapping calls serialize: each pass waits for the previous one, so
+    /// two watcher ticks can never race the files-table snapshot (the
+    /// UNIQUE(path) violation from the Plan 2 review).
     @discardableResult
     public func reindex() async throws -> Int {
+        let previous = reindexChain
+        let task = Task { [self] in
+            _ = try? await previous?.value
+            return try await performReindex()
+        }
+        reindexChain = task
+        return try await task.value
+    }
+
+    private func performReindex() async throws -> Int {
         var known: [String: KnownFile] = [:]
         let select = try db.prepare("SELECT id, path, mtime, size FROM files")
         while try select.step() {
@@ -79,7 +95,13 @@ public actor SearchIndex {
                    existing.mtime == mtime, existing.size == Int64(stamp.size) {
                     continue
                 }
-                try indexFile(stamp, project: project, replacing: known[path]?.id)
+                // A session deleted (or made unreadable) between the stat and
+                // this read must not abort the pass — skip it; the next pass
+                // prunes its rows once enumeration stops listing it.
+                guard let data = try? Data(contentsOf: stamp.url, options: .mappedIfSafe) else {
+                    continue
+                }
+                try indexFile(stamp, data: data, project: project, replacing: known[path]?.id)
                 reindexed += 1
             }
         }
@@ -146,6 +168,38 @@ public actor SearchIndex {
         }
     }
 
+    /// Sidebar list source: every indexed session, newest first, straight
+    /// from the files table — no session files are opened. Titles here are
+    /// the whole-file authoritative ones (DECISIONS: title-source authority),
+    /// falling back to the session id for untitled sessions.
+    public func sessionSummaries() async throws -> [SessionSummary] {
+        let projectsByName = Dictionary(
+            uniqueKeysWithValues: try await store.projects().map { ($0.flattenedName, $0) })
+        let statement = try db.prepare("""
+            SELECT path, session_id, project, mtime, size, title
+            FROM files ORDER BY mtime DESC
+            """)
+        var summaries: [SessionSummary] = []
+        while try statement.step() {
+            let path = statement.columnText(0)
+            let sessionID = statement.columnText(1)
+            let projectName = statement.columnText(2)
+            let fileURL = URL(fileURLWithPath: path)
+            let project = projectsByName[projectName] ?? ProjectFolder(
+                flattenedName: projectName,
+                originalPath: projectName,
+                directoryURL: fileURL.deletingLastPathComponent())
+            summaries.append(SessionSummary(
+                id: sessionID,
+                project: project,
+                fileURL: fileURL,
+                title: statement.columnIsNull(5) ? sessionID : statement.columnText(5),
+                lastActivity: Date(timeIntervalSince1970: statement.columnDouble(3)),
+                approximateSizeBytes: Int(statement.columnInt64(4))))
+        }
+        return summaries
+    }
+
     /// Converts free-typed input into a safe FTS5 expression: each
     /// whitespace-separated token is wrapped in double quotes so FTS5 treats
     /// it as a literal phrase (immune to operator syntax like `AND`, `NOT`,
@@ -160,9 +214,8 @@ public actor SearchIndex {
     }
 
     private func indexFile(
-        _ stamp: SessionFileStamp, project: ProjectFolder, replacing existingID: Int64?
+        _ stamp: SessionFileStamp, data: Data, project: ProjectFolder, replacing existingID: Int64?
     ) throws {
-        let data = try Data(contentsOf: stamp.url, options: .mappedIfSafe)
         try db.exec("BEGIN IMMEDIATE")
         do {
             let fileID: Int64
