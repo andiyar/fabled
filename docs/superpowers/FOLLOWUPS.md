@@ -2,6 +2,14 @@
 
 Tracked items that were deliberately deferred. Source: code reviews and task reports. Pull these into the appropriate plan when their layer is next touched.
 
+## From final Plan 1 gate review (2026-07-08)
+
+- **Control-op responses are uncorrelatable (Important).** `interrupt()`/`setModel()`/`setPermissionMode()`/`initialize` mint and discard their `request_id`, so callers can't match the CLI's `control_response`. Plan 3 needs the initialize response (slash-command catalog) — return the request id from control-op methods (or use a constant id for initialize) *before* Plan 3 consumes it. → Plan 3, early task.
+- **`.allow(updatedInput: nil)` never exercised against the real CLI.** Verify by probing before any caller relies on it. → Plan 3 probing list.
+- **`user` events without tool_result blocks decode to `.toolResult([])`** — semantically-null event consumers must ignore. Consider filtering in decoder or document. → Plan 3 reducer task.
+- **No `--session-id` in SessionConfiguration** (spec lists it; `extraArguments` is the escape hatch). → Plan 2 if SessionStore wants deterministic UUIDs.
+- **`AgentEvent` not `Equatable`** — Plan 3 SwiftUI diffing will likely want it; add via extension when needed.
+
 ## From AgentSession review (2026-07-08, Task 7)
 
 Fixed in-task: trailing-event race (join read task before `.terminated`), undrained stderr deadlock, unfinished stream on launch failure.
