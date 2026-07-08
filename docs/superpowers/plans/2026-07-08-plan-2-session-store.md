@@ -1,6 +1,6 @@
 # SessionStore + History Search Implementation Plan (Fabled Plan 2 of 4)
 
-> **STATUS: IMPLEMENTED on branch `claudekit-session-store` (2026-07-08), pending merge.** All 11 tasks executed subagent-driven with two-stage review per task; suite 102 tests green; all perf gates pass (transcript gate ledger-amended 500 ms → 1 s, see DECISIONS.md; deferred review findings in FOLLOWUPS.md). Expanded from `2026-07-08-plan-2-session-store-brief.md` after empirical probing of the full on-disk corpus (see "Probe findings"). Contract amendments vs the brief are listed below and ledgered in `DECISIONS.md`.
+> **STATUS: COMPLETE — merged to master 2026-07-09.** All 11 tasks executed subagent-driven with two-stage review per task; suite 102 tests green; all perf gates pass (transcript gate ledger-amended 500 ms → 1 s, see DECISIONS.md; deferred review findings in FOLLOWUPS.md). Expanded from `2026-07-08-plan-2-session-store-brief.md` after empirical probing of the full on-disk corpus (see "Probe findings"). Contract amendments vs the brief are listed below and ledgered in `DECISIONS.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
