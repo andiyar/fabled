@@ -1,0 +1,34 @@
+name: Fabled
+options:
+  bundleIdPrefix: dev.fabled
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+packages:
+  ClaudeKit:
+    path: .
+targets:
+  Fabled:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: ClaudeKit
+        product: ClaudeKit
+      - package: ClaudeKit
+        product: FabledCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.fabled.Fabled
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        # Dev build: no sandbox (spawns `claude`, reads ~/.claude), ad-hoc signing.
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_IDENTITY: "-"
+    scheme:
+      testTargets: []
