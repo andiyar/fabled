@@ -14,7 +14,12 @@ struct JSONLines: Sequence, IteratorProtocol {
     mutating func next() -> Data? {
         while offset < data.endIndex {
             let newline = data[offset...].firstIndex(of: 0x0A) ?? data.endIndex
-            let line = data.subdata(in: offset..<newline)
+            // Non-copying slice: shares the parent's storage and preserves its
+            // index space. Consumers must not assume startIndex == 0, and any
+            // consumer that needs an independent copy must materialize one
+            // itself (none currently do — decoded entries store bridged
+            // values, never the line Data).
+            let line = data[offset..<newline]
             offset = newline < data.endIndex ? data.index(after: newline) : data.endIndex
             if !line.isEmpty { return line }
         }
