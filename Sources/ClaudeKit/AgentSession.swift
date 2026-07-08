@@ -99,7 +99,8 @@ public actor AgentSession {
 
     public func respond(to request: PermissionRequest, decision: PermissionDecision) {
         write(Outbound.permissionResponse(requestID: request.requestID,
-                                          decision: decision))
+                                          decision: decision,
+                                          requestedInput: request.input))
     }
 
     @discardableResult

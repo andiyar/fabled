@@ -114,7 +114,7 @@ final class AgentSessionTests: XCTestCase {
                 if let perm = PermissionRequest(req) {
                     XCTAssertEqual(perm.toolName, "Bash")
                     await session.respond(
-                        to: perm, decision: .allow(updatedInput: perm.input))
+                        to: perm, decision: .allowAsRequested)
                 }
             case .result: gotResult = true
             default: break

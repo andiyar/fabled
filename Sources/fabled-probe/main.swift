@@ -42,7 +42,7 @@ for await event in await session.events {
     case .controlRequest(let req):
         if let perm = PermissionRequest(req) {
             print("· auto-allowing \(perm.toolName)")
-            await session.respond(to: perm, decision: .allow(updatedInput: perm.input))
+            await session.respond(to: perm, decision: .allowAsRequested)
         }
     case .result(let r):
         print("· done (cost: \(r.totalCostUSD ?? 0))")
