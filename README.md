@@ -15,9 +15,9 @@
 
 ---
 
-I live in Claude Code most of the day, and the Claude desktop app is Electron — bundled Chromium, RAM you can feel, none of it native. The Claude Code CLI underneath it, though, already does all the hard work: a proper bidirectional streaming JSON protocol, session transcripts sitting right there on disk, OAuth handled through the keychain. So rather than wait for someone else to build the native app I wanted, I'm building it myself: Fabled spawns and speaks to `claude` directly, no Node sidecar, no Electron, just Swift talking the CLI's own protocol.
+I have been playing more over time with Claude Code, and because I'm not a programmer I use the desktop app more than the terminal. The desktop app though is is Electron and feels it. Hence, Fabled - this is a custom SwiftUI macOS app build to wrap the claude code CLI with sessions, OAuth, etc, etc. As far as I know this doesn't exist so - with the help of Claude code haha - I'm making it.
 
-No grand roadmap here — this is scoped out plan by plan (coordinated with Fable, implemented by Opus subagents, a whole method in itself — see `docs/superpowers/` if you're curious how that works), and I add things as they're needed rather than guessing ahead. First goal is a daily-driver replacement for the desktop app: coding sessions, general chat, cowork-style tasks, with an embedded terminal as the escape hatch for anything the GUI hasn't caught up to yet.
+No grand roadmap here, this is scoped out plan by plan (and orchestrated by Claude Fable, built by Opus), with thinkgs added as they're needed. First goal is a daily-driver replacement for the desktop app: coding sessions, general chat, cowork-style tasks, with an embedded terminal as a backup in case it breaks.
 
 ---
 
