@@ -1,5 +1,7 @@
 # ClaudeKit Core Implementation Plan (Fabled Plan 1 of 4)
 
+> **STATUS: COMPLETE — merged to master 2026-07-08 (merge 3752358).** All 9 tasks executed by Opus subagents, per-task verification + Task 7 review loop + final gate review (READY). 25 tests (2 env-gated live). Deferred findings: docs/superpowers/FOLLOWUPS.md. Next: expand Plan 2 brief.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A UI-free Swift package (`ClaudeKit`) that spawns the Claude Code CLI, speaks its stream-json protocol (events, handshake, permission round-trip, control operations), proven by unit tests over recorded fixtures and an env-gated live integration test.
