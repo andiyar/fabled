@@ -322,6 +322,21 @@ final class ChatSessionTests: XCTestCase {
         await waitUntil("todos update") { session.todos.allSatisfy { $0.status == .completed } }
     }
 
+    func testEmptyTodoWriteLeavesTodosUnchanged() async throws {
+        let (connection, continuation, _) = makeFakeConnection()
+        let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
+        session.begin()
+        try yieldEvent(continuation,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"td1","name":"TodoWrite","input":{"todos":[{"content":"a","status":"pending","activeForm":"a"}]}}]},"uuid":"a1"}"#)
+        await waitUntil("todos") { session.todos.count == 1 }
+        try yieldEvent(continuation,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"td2","name":"TodoWrite","input":{"todos":[]}}]},"uuid":"a2"}"#)
+        // Both events fold into the timeline in order; once the second card
+        // exists, the empty write has been fully processed.
+        await waitUntil("second write processed") { session.timeline.count == 2 }
+        XCTAssertEqual(session.todos.count, 1, "empty TodoWrite must not clear todos")
+    }
+
     func testSubagentEventsRouteToSubTimeline() async throws {
         let (connection, continuation, _) = makeFakeConnection()
         let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))

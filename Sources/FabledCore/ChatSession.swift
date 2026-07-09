@@ -318,6 +318,9 @@ public final class ChatSession: Identifiable {
             for block in message.content {
                 if case .toolUse(_, "TodoWrite", let input) = block {
                     let parsed = TodoItem.list(from: input)
+                    // Deliberate: an empty list never clears. The CLI re-sends
+                    // the complete list on every call, so an empty todos array
+                    // is a malformed write, not a reset (T5 review; test-pinned).
                     if !parsed.isEmpty { todos = parsed }
                 }
             }

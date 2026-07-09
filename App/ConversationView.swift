@@ -81,6 +81,12 @@ struct ConversationView: View {
                 }
                 .defaultScrollAnchor(.bottom)
             }
+            if !session.todos.isEmpty {
+                TodoChecklistView(todos: session.todos)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 4)
+                    .frame(maxWidth: 760)
+            }
             Divider()
             ComposerView(session: session)
         }
