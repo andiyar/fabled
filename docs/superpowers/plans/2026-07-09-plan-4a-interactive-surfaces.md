@@ -578,7 +578,7 @@ final class InteractionModelTests: XCTestCase {
         XCTAssertEqual(ToolCallSummary.summarize(name: "AskUserQuestion", input: question),
                        "Which color?")
         let plan = try JSONDecoder().decode(JSONValue.self, from: Data(
-            #"{"plan":"# Add README\nmore"}"#.utf8))
+            ##"{"plan":"# Add README\nmore"}"##.utf8))
         XCTAssertEqual(ToolCallSummary.summarize(name: "ExitPlanMode", input: plan),
                        "# Add README")
         let todos = try JSONDecoder().decode(JSONValue.self, from: Data(
@@ -904,7 +904,7 @@ This **deliberately breaks existing `.respond(...)` assertions** in `ChatSession
                                   permissionMode: "plan")
         session.begin()
         try yieldEvent(continuation,
-            #"{"type":"control_request","request_id":"e1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# The Plan"},"requires_user_interaction":true}}"#)
+            ##"{"type":"control_request","request_id":"e1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# The Plan"},"requires_user_interaction":true}}"##)
         await waitUntil("plan gate") { session.pendingGate != nil }
         guard case .planApproval(let approval)? = session.pendingGate else { return XCTFail() }
         XCTAssertEqual(approval.plan, "# The Plan")
@@ -923,7 +923,7 @@ This **deliberately breaks existing `.respond(...)` assertions** in `ChatSession
         let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
         session.begin()
         try yieldEvent(continuation,
-            #"{"type":"control_request","request_id":"e2","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# P"},"requires_user_interaction":true}}"#)
+            ##"{"type":"control_request","request_id":"e2","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# P"},"requires_user_interaction":true}}"##)
         await waitUntil("gate") { session.pendingGate != nil }
         guard case .planApproval(let approval)? = session.pendingGate else { return XCTFail() }
         session.rejectPlan(approval, feedback: "needs a licence section")
