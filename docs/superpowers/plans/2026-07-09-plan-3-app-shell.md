@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **STATUS: CODE COMPLETE — 2026-07-09.** Tasks 1–12 landed with two-stage review each; 160 package tests green (5 live-gated skips), all 7 live protocol tests pass against CLI 2.1.204, app builds and boots. Gate amendments during execution (all reviewed + tested): dangling streamed text finalizes at turn end (T6); aborted turns clear abandoned permission gates + duplicate-respond guard (T7); `bootstrap()` idempotent for second windows (T9); launch-failure alert dismissable (T10); permission card state keyed per request (T11); null-input allow fallback + `terminate()` write guard (T1/T2 hardening). Known pre-existing: PERF enumeration gate ~5.5s vs 5s target (baseline-verified, environment-bound). **Manual polish gate (Task 13 Step 2) pending Ben's run** — flip to COMPLETE once it passes.
+
 **Goal:** The Fabled.app a person can live in: sidebar (live sessions + searchable history), streaming conversation view, composer, permission cards, model picker — so Ben can use Fabled instead of the Electron app for ordinary coding sessions.
 
 **Architecture:** A new `FabledCore` SPM target holds everything with logic — the pure `TimelineReducer` (AgentEvent → `[TimelineItem]`), the `@Observable` view models (`ChatSession` per live conversation, `AppModel` for the app) — all tested by `swift test`. The `Fabled` app target (XcodeGen-generated `.xcodeproj`) holds only thin SwiftUI views over those models. ClaudeKit gains the protocol pieces Plan 3 needs (stream deltas, permission-response fixes, control-op correlation, SearchIndex hardening), each driven by fixtures recorded from the real CLI during plan-writing.
@@ -3687,7 +3689,7 @@ The brief's exit criterion, run as a scripted manual gate, then the paperwork: d
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-07-09-plan-3-app-shell.md` (status header)
 
-- [ ] **Step 1: Full verification pass**
+- [x] **Step 1: Full verification pass**
 
 ```bash
 swift test 2>&1 | tail -3
@@ -3710,7 +3712,7 @@ All in one app run, no terminal (except the final settings check):
 
 If any step fails: STOP, fix forward (new task with the coordinator), re-run the gate. Do not check the box on a partial pass.
 
-- [ ] **Step 3: Ledger the decisions**
+- [x] **Step 3: Ledger the decisions**
 
 Append to `docs/superpowers/DECISIONS.md`:
 
@@ -3722,7 +3724,7 @@ Append to `docs/superpowers/DECISIONS.md`:
 - **2026-07-09 · Resumed sessions seed their timeline from disk.** Probed live: `--resume` replays nothing on the stream-json wire (context survives server-side). Resume/Fork load the transcript through the reducer, then attach the live stream. *Revisit if:* a CLI update starts replaying (isReplay-flagged events would double-render — the seed guard would need dedupe).
 ```
 
-- [ ] **Step 4: Reconcile FOLLOWUPS.md**
+- [x] **Step 4: Reconcile FOLLOWUPS.md**
 
 In `docs/superpowers/FOLLOWUPS.md`, move these items to a new "Resolved in Plan 3 (2026-07-09)" section (keep one line each, note the fixing task): control-op correlation (T1), `.allow(updatedInput: nil)` probe (T2 — was *broken*, now impossible to misuse), `toolResult([])` no-op consumers (T5 reducer), `AgentEvent` Equatable (T1), orphaned child on dealloc I2 (T1), SIGPIPE I3 (T1 + T8), reindex reentrancy (T4), vanished-file abort (T4), title-source divergence (T4/T9).
 
@@ -3732,7 +3734,7 @@ Add new deferred items observed during Plan 3 (whatever came up in reviews), plu
 - Heavy `transcript(for:)` reads still run on the SessionStore executor (~0.65 s for the 52 MB pathological file) — fine for open-on-click; revisit with nonisolated reads if the sidebar ever stutters. → Plan 4 if felt.
 - `.alert` binding on `launchError` re-presents on repeated failures (Task 10 note) — cosmetic. → Plan 4 polish.
 
-- [ ] **Step 5: Update README.md**
+- [x] **Step 5: Update README.md**
 
 Add (or replace) a "Building" section:
 
@@ -3747,7 +3749,7 @@ Add (or replace) a "Building" section:
 - Perf gates against the real local corpus: `CLAUDEKIT_PERF=1 swift test`
 ```
 
-- [ ] **Step 6: Mark the plan complete and commit**
+- [x] **Step 6: Mark the plan complete and commit**
 
 Edit this plan's header: add `> **STATUS: COMPLETE — <date>.** …` line in the style of Plan 2, summarizing test counts and any gate amendments.
 

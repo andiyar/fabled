@@ -61,6 +61,15 @@ CLAUDEKIT_LIVE=1 swift test    # + live tests against a real claude CLI (costs a
 
 Requires macOS 15+, Swift 6, and the `claude` CLI on your `PATH`.
 
+## Building
+
+- Engine + view models (tests): `swift test`
+- The app: `brew install xcodegen` once, then
+  `xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled build`
+  (`Fabled.xcodeproj` is generated output — edit `project.yml`, never the project.)
+- Live protocol tests (spends ~cents on haiku): `CLAUDEKIT_LIVE=1 swift test`
+- Perf gates against the real local corpus: `CLAUDEKIT_PERF=1 swift test`
+
 ## Structure
 
 - `Sources/ClaudeKit` — the protocol engine: process spawning, event decoding, session config, outbound control messages. Zero third-party deps by design.
