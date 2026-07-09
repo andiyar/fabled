@@ -2139,7 +2139,7 @@ Brief feature 5: parented traffic (routed since Task 5) becomes visible — the 
 
 **Files:**
 - Modify: `App/TimelineItemViews.swift` (`TimelineItemView`, `ToolCallCard`)
-- Modify: `App/InspectorView.swift` (panel: drill-down section; pass-through of live sub-timelines already wired in Task 6)
+- Modify: `App/InspectorView.swift` (panel: drill-down section; the container passes the inspected Task call's sub-timeline as `subagentItems` — T6 quality refactor)
 
 - [ ] **Step 1: Badge data into the card.** In `App/TimelineItemViews.swift`, `ToolCallCard` gains one property (after `isRunning`):
 
@@ -2171,15 +2171,16 @@ and renders it in the label `HStack`, next to the diff-chips slot:
 
 (Other `ToolCallCard(...)` construction sites, if any, pass `subagentSteps: nil`.)
 
-- [ ] **Step 2: Drill-down in the panel.** `InspectorPanel` already receives `subagentTimelines` (Task 6). In `toolDetail`, replace the Task 11 placeholder comment with:
+- [ ] **Step 2: Drill-down in the panel.** The container passes the inspected item's sub-timeline as `subagentItems` (T6 quality refactor). In `toolDetail`, replace the Task 11 placeholder comment with:
 
 ```swift
-        if let sub = subagentTimelines[id], !sub.isEmpty {
+        if let sub = subagentItems, !sub.isEmpty {
             sectionHeader("Subagent activity (\(sub.count) items)",
                           systemImage: "person.2.circle")
             VStack(alignment: .leading, spacing: 6) {
                 // Same vocabulary, read-only. Sub tool rows are inspectable
-                // too — resolvedItem already searches sub-timelines.
+                // too — the container's inspectedItem lookup already searches
+                // sub-timelines.
                 ForEach(sub) { item in
                     TimelineItemView(item: item, session: nil)
                 }
@@ -2249,7 +2250,7 @@ Expected: everything green, `** BUILD SUCCEEDED **`.
 
 Run through in the built app; every line must feel right, not merely function:
 
-1. **Inspector**: tool rows are calm one-liners; click → detail panel; ⌥⌘I; selection survives scrolling a 1000-item transcript (LazyVStack recycling).
+1. **Inspector**: tool rows are calm one-liners; click → detail panel; ⌥⌘I; selection survives scrolling a 1000-item transcript (LazyVStack recycling); with the inspector open DURING generation, a large tool result (big file read / wide grep) causes no main-thread jank (T6 quality review); in-panel ✕ clears selection while ⌥⌘I closes the panel — confirm that two-affordance split feels right.
 2. **Diffs**: an Edit shows a correct colored diff + `+N −M` chips; Write is all-green; MultiEdit shows hunk-per-edit.
 3. **AskUserQuestion**: single-question click-through; multi-question form; Skip; answers echoed correctly by Claude.
 4. **Plan mode**: full probe-plan flow — propose → request changes → revised → approve → toolbar mode flips to Default via the wire → implementation proceeds.
