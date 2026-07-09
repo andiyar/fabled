@@ -52,6 +52,15 @@ Deferred:
 - **Answer-assembly logic is untestable where it lives.** Catalog ordering, ", " join, option-wins-over-free-text, trim, and free-text-alone completeness (probe finding 2) are private methods in the App-target view. Extract a pure `QuestionPrompt.assembleAnswers(selections:otherText:)` into FabledCore so FabledCoreTests can pin it — same pattern as the DiffCache relocation note above. → backlog.
 - **No height bound on long question forms.** 10+ options grow the composer card unbounded; wrap in a ScrollView with max height if long forms appear in practice. → backlog.
 
+## From Plan 4a T9 quality review (2026-07-09)
+
+Deferred:
+
+- **Empty-feedback plan rejection message is not test-pinned.** `rejectPlan(_:feedback:)` with empty/whitespace feedback sends the default "The user rejected the plan. Revise it..." message; only the non-empty branch has a test. One-line FabledCore test closes it. → backlog.
+- **Stale-sheet dismissal invariant lives in a View closure, untestable.** Extract the presence check into a `ChatSession.hasPendingGate(requestID:)` helper if it ever needs pinning across abort/approve/reject transitions. → backlog.
+- **`planTitle` trims-to-empty edge.** A first line like "###" yields an empty caption instead of the "Untitled plan" fallback. Cosmetic. → backlog.
+- **Esc semantics differ across gate surfaces (note, decided).** Sheet Esc = close/decide-later; question-card Esc = Skip (commits). Matches platform convention for sheets; keep unless gate feedback says otherwise.
+
 ## From final Plan 1 gate review (2026-07-08)
 
 - **No `--session-id` in SessionConfiguration** (spec lists it; `extraArguments` is the escape hatch). → Plan 2 if SessionStore wants deterministic UUIDs.
