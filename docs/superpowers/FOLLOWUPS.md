@@ -36,6 +36,14 @@ Surfaced by Plan 3's per-task code reviews:
 - Gate feedback wishlist: sidebar sorting options, session tagging, and general QoL organization features. → Plan 4 scoping.
 - Gate feedback — Electron-app layout parity: tool/code activity as compact summaries opening in a side inspector panel (not inline disclosure), plus bubble width tuning. → Plan 4 (conversation surfaces).
 
+## From Plan 4a T7 quality review (2026-07-09)
+
+Deferred:
+
+- **DiffCache has no eviction bound.** Entries live for the app's lifetime (LRU by count/bytes, or a size threshold that skips caching giant inputs, would bound it). Consider relocating the cache to FabledCore so the revalidation contract ({} → full input, no stale diffs) becomes unit-testable. → backlog.
+- **DiffSectionView renders every diff line in a non-lazy VStack.** A multi-thousand-line Write builds thousands of views on inspector-open in one shot. Cap rendered lines with a "+M more lines" affordance, or fall back to the plain monospaced block above a threshold. → backlog.
+- **Optional engine test pins not yet written.** All-edits-malformed MultiEdit → nil; empty edits array → nil; Write missing content → nil; MultiEdit missing file_path → nil. → backlog.
+
 ## From final Plan 1 gate review (2026-07-08)
 
 - **No `--session-id` in SessionConfiguration** (spec lists it; `extraArguments` is the escape hatch). → Plan 2 if SessionStore wants deterministic UUIDs.
