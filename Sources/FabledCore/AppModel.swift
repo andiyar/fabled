@@ -139,6 +139,11 @@ public final class AppModel {
         await launch(configuration, seed: seed)
     }
 
+    /// Dismisses the launch-failure alert (RootView's binding calls this).
+    public func clearLaunchError() {
+        launchError = nil
+    }
+
     public func close(_ session: ChatSession) {
         session.terminate()
         liveSessions.removeAll { $0.id == session.id }

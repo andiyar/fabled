@@ -13,7 +13,10 @@ struct RootView: View {
         }
         .frame(minWidth: 900, minHeight: 560)
         .task { await app.bootstrap() }
-        .alert("Session failed", isPresented: .constant(app.launchError != nil)) {
+        .alert("Session failed", isPresented: Binding(
+            get: { app.launchError != nil },
+            set: { if !$0 { app.clearLaunchError() } }
+        )) {
             Button("OK") { }
         } message: {
             Text(app.launchError ?? "")
