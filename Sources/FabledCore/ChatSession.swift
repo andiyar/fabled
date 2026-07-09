@@ -8,7 +8,7 @@ import Observation
 @Observable
 public final class ChatSession: Identifiable {
     /// CLI version the current fixtures were recorded against.
-    public static let testedCLIVersion = "2.1.204"
+    public static let testedCLIVersion = "2.1.205"
 
     public let id = UUID()
     public let workingDirectory: URL
@@ -27,12 +27,21 @@ public final class ChatSession: Identifiable {
     public private(set) var lastUsage: JSONValue?
     public private(set) var hasEnded = false
     /// Yellow banner at the top of ConversationView. Doubles as a
-    /// startup-failure banner: set when the child dies before `system init`.
+    /// startup-failure banner: set when the child dies before the
+    /// initialize handshake was ever acknowledged.
     public private(set) var versionNote: String?
+    /// The CLI acknowledged the initialize handshake (catalog
+    /// control_response) or sent `system init` — the child is alive and
+    /// talking, even though 2.1.205+ holds init until the first user turn.
+    public private(set) var isReady = false
 
     private let connection: AgentConnection
     private var consumeTask: Task<Void, Never>?
     private var turnsInFlight = 0
+    private var hasSentMessage = false
+    /// Model came from the launch configuration or the user's picker choice —
+    /// never overridden by catalog defaults or a late `system init`.
+    private var modelExplicitlyChosen: Bool
 
     public init(connection: AgentConnection, workingDirectory: URL,
                 permissionMode: String = "default", model: String? = nil) {
@@ -40,6 +49,29 @@ public final class ChatSession: Identifiable {
         self.workingDirectory = workingDirectory
         self.permissionMode = permissionMode
         self.currentModel = model
+        self.modelExplicitlyChosen = model != nil
+    }
+
+    /// Ready, but the CLI is holding `system init` (and all other output)
+    /// until the first user turn — 2.1.205+ defers the init event. Views show
+    /// a "ready" affordance instead of a dead-looking empty pane.
+    public var isAwaitingFirstMessage: Bool {
+        isReady && !hasSentMessage && !hasEnded
+    }
+
+    /// Launch-time drift warning derived from the binary on disk. Waiting for
+    /// `system init` to compare versions means warning only after the user has
+    /// already typed into a drifted CLI (init is deferred on 2.1.205+); the
+    /// install path knows the version at spawn. Init stays authoritative and
+    /// clears or resets this when it arrives.
+    public func noteDiskVersion(_ version: String?) {
+        guard let version, version != Self.testedCLIVersion else { return }
+        versionNote = Self.driftNote(version)
+    }
+
+    private static func driftNote(_ version: String) -> String {
+        "CLI \(version) differs from the tested \(testedCLIVersion) — "
+            + "unrecognized events render generically."
     }
 
     /// Production path: spawn the CLI and bind a session to it.
@@ -58,6 +90,10 @@ public final class ChatSession: Identifiable {
             workingDirectory: configuration.workingDirectory,
             permissionMode: configuration.permissionMode ?? "default",
             model: configuration.model)
+        if let executable = configuration.executable {
+            session.noteDiskVersion(
+                SessionConfiguration.resolveClaudeVersion(executable: executable))
+        }
         session.begin()
         return session
     }
@@ -89,6 +125,7 @@ public final class ChatSession: Identifiable {
         guard !trimmed.isEmpty, !hasEnded else { return }
         timeline = TimelineReducer.appendUserMessage(
             timeline, id: UUID().uuidString, text: trimmed)
+        hasSentMessage = true
         turnsInFlight += 1
         isWorking = true
         Task { await connection.send(trimmed) }
@@ -111,6 +148,7 @@ public final class ChatSession: Identifiable {
 
     public func setModel(_ value: String) {
         currentModel = value
+        modelExplicitlyChosen = true
         Task { await connection.setModel(value) }
     }
 
@@ -156,14 +194,18 @@ public final class ChatSession: Identifiable {
         switch event {
         case .systemInit(let info):
             self.info = info
-            if currentModel == nil { currentModel = info.model }
+            isReady = true
+            if !modelExplicitlyChosen, !info.model.isEmpty { currentModel = info.model }
             if !info.permissionMode.isEmpty { permissionMode = info.permissionMode }
-            if !info.cliVersion.isEmpty, info.cliVersion != Self.testedCLIVersion {
-                versionNote = "CLI \(info.cliVersion) differs from the tested "
-                    + "\(Self.testedCLIVersion) — unrecognized events render generically."
+            // Authoritative over the disk-derived launch note: clears a stale
+            // warning or replaces it with the truth.
+            if !info.cliVersion.isEmpty {
+                versionNote = info.cliVersion == Self.testedCLIVersion
+                    ? nil : Self.driftNote(info.cliVersion)
             }
         case .controlResponse(let envelope)
             where envelope.requestID == AgentSession.initializeRequestID:
+            isReady = true
             harvestCatalog(envelope.payload)
         case .controlRequest(let request):
             if let permission = PermissionRequest(request) {
@@ -189,10 +231,12 @@ public final class ChatSession: Identifiable {
             hasEnded = true
             isWorking = false
             isThinking = false
-            // Dead before `system init` ever arrived — almost always a missing
-            // or unresolvable CLI. Surface it loudly instead of a silent dead
-            // session in the sidebar.
-            if info == nil {
+            // Dead before the initialize handshake was ever acknowledged —
+            // almost always a missing or unresolvable CLI. Surface it loudly
+            // instead of a silent dead session in the sidebar. (`info == nil`
+            // is no longer the test: 2.1.205+ defers `system init` until the
+            // first user turn, so a session closed before typing has no init.)
+            if !isReady {
                 versionNote = "claude exited immediately (code \(exitCode)) before "
                     + "initializing — is the Claude Code CLI installed and executable? "
                     + "Fabled looks in PATH, ~/.local/bin, ~/.claude/local, "
@@ -219,6 +263,12 @@ public final class ChatSession: Identifiable {
                 resolvedModel: entry["resolvedModel"]?.stringValue,
                 displayName: entry["displayName"]?.stringValue ?? value,
                 optionDescription: entry["description"]?.stringValue)
+        }
+        // With init deferred to the first turn (2.1.205+), the catalog is the
+        // only pre-turn source for what "default" resolves to — without this
+        // the picker sits on a blank "Model" until the user types.
+        if currentModel == nil {
+            currentModel = models.first { $0.value == "default" }?.resolvedModel
         }
     }
 }

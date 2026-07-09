@@ -59,6 +59,40 @@ final class SessionConfigurationTests: XCTestCase {
             "minimal PATH must still resolve the local install")
     }
 
+    // MARK: - Version from disk
+
+    func testVersionFromSymlinkedNativeInstall() throws {
+        // Native-installer layout: ~/.local/bin/claude is a symlink to a real
+        // binary NAMED by its version (~/.local/share/claude/versions/2.1.205).
+        let fm = FileManager.default
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        let versions = root.appendingPathComponent(".local/share/claude/versions")
+        try fm.createDirectory(at: versions, withIntermediateDirectories: true)
+        let binary = versions.appendingPathComponent("2.1.205")
+        try Data("#!/bin/sh\n".utf8).write(to: binary)
+        let bin = root.appendingPathComponent(".local/bin")
+        try fm.createDirectory(at: bin, withIntermediateDirectories: true)
+        let link = bin.appendingPathComponent("claude")
+        try fm.createSymbolicLink(at: link, withDestinationURL: binary)
+        defer { try? fm.removeItem(at: root) }
+
+        XCTAssertEqual(SessionConfiguration.resolveClaudeVersion(executable: link),
+                       "2.1.205")
+    }
+
+    func testVersionFromVersionedDirectoryComponent() {
+        // Homebrew-style layout: the version is a Cellar directory component.
+        let exe = URL(fileURLWithPath: "/opt/homebrew/Cellar/claude-code/2.1.199/bin/claude")
+        XCTAssertEqual(SessionConfiguration.resolveClaudeVersion(executable: exe),
+                       "2.1.199")
+    }
+
+    func testVersionNilWhenPathCarriesNoVersion() {
+        XCTAssertNil(SessionConfiguration.resolveClaudeVersion(
+            executable: URL(fileURLWithPath: "/usr/local/bin/claude")))
+    }
+
     func testBaseArguments() {
         let config = SessionConfiguration(
             workingDirectory: URL(fileURLWithPath: "/tmp/x"))

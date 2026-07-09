@@ -43,6 +43,19 @@ public struct SessionConfiguration: Sendable {
         }
     }
 
+    /// Best-effort CLI version read from the executable's on-disk location,
+    /// available at spawn time — unlike `system init`, which 2.1.205+ defers
+    /// until the first user turn. The native installer names the real binary
+    /// by version (~/.local/bin/claude → ~/.local/share/claude/versions/2.1.205)
+    /// and Homebrew keeps a versioned Cellar directory, so after resolving
+    /// symlinks the deepest version-shaped path component is the version.
+    /// nil when the layout carries no hint; callers fall back to init.
+    public static func resolveClaudeVersion(executable: URL) -> String? {
+        let versionShaped = /\d+\.\d+\.\d+(?:[-+.][0-9A-Za-z.-]+)?/
+        return executable.resolvingSymlinksInPath().pathComponents.reversed()
+            .first { $0.wholeMatch(of: versionShaped) != nil }
+    }
+
     public func arguments() -> [String] {
         var args = [
             "-p", "--verbose",

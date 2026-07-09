@@ -9,7 +9,7 @@ final class StreamEventTests: XCTestCase {
 
     func testPartialMessagesFixtureCensus() throws {
         let events = try decodeEvents("2026-07-09-partial-messages.jsonl")
-        XCTAssertEqual(events.count, 24)
+        XCTAssertEqual(events.count, 25)
 
         var messageStart = 0, blockStart = 0, textDelta = 0, thinkingDelta = 0
         var other = 0, blockStop = 0, messageDelta = 0, messageStop = 0
@@ -31,12 +31,15 @@ final class StreamEventTests: XCTestCase {
             case .other: other += 1
             }
         }
-        // Counts pinned from the recorded capture (see plan "Probe findings").
+        // Counts pinned from a hand census of the capture (re-recorded on
+        // CLI 2.1.205, 2026-07-09). Text arrived in two deltas this take —
+        // chunking is recording luck, not protocol.
         XCTAssertEqual(messageStart, 1)
         XCTAssertEqual(blockStart, 2)          // 1 thinking block + 1 text block
         XCTAssertEqual(thinkingDelta, 3)
-        XCTAssertEqual(textDelta, 1)
-        XCTAssertEqual(texts, ["The quick brown fox jumps over the lazy dog."])
+        XCTAssertEqual(textDelta, 2)
+        XCTAssertEqual(texts.joined(),
+                       "The quick brown fox jumps over the lazy dog.")
         XCTAssertEqual(other, 1)               // signature_delta → .other, tolerant
         XCTAssertEqual(blockStop, 2)
         XCTAssertEqual(messageDelta, 1)

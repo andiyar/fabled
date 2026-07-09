@@ -33,7 +33,7 @@ final class ChatSessionTests: XCTestCase {
     func testSystemInitPopulatesModelAndMode() async throws {
         let (session, continuation, _) = makeSession()
         try yield(continuation, #"""
-        {"type":"system","subtype":"init","session_id":"s1","model":"claude-haiku-4-5-20251001","cwd":"/tmp/demo","permissionMode":"default","tools":[],"slash_commands":[],"agents":[],"skills":[],"claude_code_version":"2.1.204"}
+        {"type":"system","subtype":"init","session_id":"s1","model":"claude-haiku-4-5-20251001","cwd":"/tmp/demo","permissionMode":"default","tools":[],"slash_commands":[],"agents":[],"skills":[],"claude_code_version":"\#(ChatSession.testedCLIVersion)"}
         """#)
         await waitUntil("init") { session.info != nil }
         XCTAssertEqual(session.currentModel, "claude-haiku-4-5-20251001")
@@ -48,6 +48,81 @@ final class ChatSessionTests: XCTestCase {
         """#)
         await waitUntil("init") { session.info != nil }
         XCTAssertNotNil(session.versionNote)
+    }
+
+    // MARK: - Deferred init (CLI 2.1.205 holds `system init` until first turn)
+
+    func testCatalogMarksReadyAndAdoptsDefaultModel() async throws {
+        let (session, continuation, _) = makeSession()
+        XCTAssertFalse(session.isReady)
+        XCTAssertFalse(session.isAwaitingFirstMessage)
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"commands":[],"models":[{"value":"default","resolvedModel":"claude-opus-4-8","displayName":"Default (recommended)"},{"value":"haiku","displayName":"Haiku"}]}}}
+        """#)
+        await waitUntil("ready") { session.isReady }
+        XCTAssertTrue(session.isAwaitingFirstMessage,
+                      "ready + no user turn yet = awaiting first message")
+        XCTAssertEqual(session.currentModel, "claude-opus-4-8",
+                       "no explicit model: adopt the catalog default's resolved id")
+    }
+
+    func testCatalogDoesNotOverrideExplicitModel() async throws {
+        let (connection, continuation, _) = makeFakeConnection()
+        let session = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"),
+            model: "haiku")
+        session.begin()
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"models":[{"value":"default","resolvedModel":"claude-opus-4-8","displayName":"Default"}]}}}
+        """#)
+        await waitUntil("ready") { session.isReady }
+        XCTAssertEqual(session.currentModel, "haiku")
+    }
+
+    func testSendClearsAwaitingFirstMessage() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}
+        """#)
+        await waitUntil("ready") { session.isReady }
+        XCTAssertTrue(session.isAwaitingFirstMessage)
+        session.send("hello")
+        XCTAssertFalse(session.isAwaitingFirstMessage)
+    }
+
+    func testTerminatedAfterReadyIsNotALaunchFailure() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{}}}
+        """#)
+        await waitUntil("ready") { session.isReady }
+        // 2.1.205 defers `system init` until the first user turn, so a session
+        // closed before typing dies with info == nil — that is NOT a launch
+        // failure once the initialize handshake was acknowledged.
+        continuation.yield(.terminated(exitCode: 0))
+        continuation.finish()
+        await waitUntil("ended") { session.hasEnded }
+        XCTAssertNil(session.info)
+        XCTAssertNil(session.versionNote,
+                     "handshake acked: no dead-at-launch banner")
+    }
+
+    func testDiskVersionDriftBannerAndInitAuthority() async throws {
+        let (session, continuation, _) = makeSession()
+        session.noteDiskVersion(ChatSession.testedCLIVersion)
+        XCTAssertNil(session.versionNote, "matching disk version raises no banner")
+        session.noteDiskVersion(nil)
+        XCTAssertNil(session.versionNote, "unparseable install layout stays quiet")
+        session.noteDiskVersion("9.9.9")
+        XCTAssertNotNil(session.versionNote, "drifted disk version warns at launch")
+        // `system init` (first turn) is authoritative: a matching version
+        // clears a stale disk-derived warning.
+        try yield(continuation, #"""
+        {"type":"system","subtype":"init","session_id":"s1","model":"m","cwd":"/","permissionMode":"default","tools":[],"slash_commands":[],"agents":[],"skills":[],"claude_code_version":"\#(ChatSession.testedCLIVersion)"}
+        """#)
+        await waitUntil("init") { session.info != nil }
+        XCTAssertNil(session.versionNote)
     }
 
     func testSendEchoesAndTracksTurns() async throws {

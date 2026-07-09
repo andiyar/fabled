@@ -31,6 +31,24 @@ struct ConversationView: View {
             GeometryReader { geo in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
+                        // 2.1.205+ holds all output (including `system init`)
+                        // until the first user turn — without this a fresh
+                        // session is an empty pane indistinguishable from a
+                        // dead one.
+                        if session.timeline.isEmpty && !session.hasEnded {
+                            HStack(spacing: 6) {
+                                if session.isAwaitingFirstMessage {
+                                    Text("Ready — send a message to begin.")
+                                } else {
+                                    ProgressView().controlSize(.small)
+                                    Text("Starting Claude…")
+                                }
+                            }
+                            .font(Theme.assistantFont(.callout)).italic()
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 48)
+                        }
                         ForEach(session.timeline) { item in
                             TimelineItemView(item: item, session: session)
                         }
