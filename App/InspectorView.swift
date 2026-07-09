@@ -97,7 +97,18 @@ struct InspectorPanel: View {
             monospacedBlock(JSONPretty.string(result),
                             tint: isError == true ? .red : nil)
         }
-        // Task 11 inserts the subagent drill-down here for Task/Agent.
+        if let sub = subagentItems, !sub.isEmpty {
+            sectionHeader("Subagent activity (\(sub.count) items)",
+                          systemImage: "person.2.circle")
+            VStack(alignment: .leading, spacing: 6) {
+                // Same vocabulary, read-only. Sub tool rows are inspectable
+                // too — the container's inspectedItem lookup already searches
+                // sub-timelines.
+                ForEach(sub) { item in
+                    TimelineItemView(item: item, session: nil)
+                }
+            }
+        }
     }
 
     private func sectionHeader(_ title: String, systemImage: String) -> some View {

@@ -15,7 +15,8 @@ struct TimelineItemView: View {
             AssistantTextView(markdown: markdown, isStreaming: isStreaming)
         case .toolCall(let id, let name, let summary, let input, let result, let isError, let isRunning):
             ToolCallCard(id: id, name: name, summary: summary, input: input,
-                         result: result, isError: isError, isRunning: isRunning)
+                         result: result, isError: isError, isRunning: isRunning,
+                         subagentSteps: session?.subagentTimelines[id]?.count)
         case .permission(_, let request, let resolution):
             // Static status row — the interactive card renders in ComposerView while pending.
             PermissionStatusView(request: request, resolution: resolution)
@@ -75,6 +76,8 @@ struct ToolCallCard: View {
     let result: JSONValue?
     let isError: Bool?
     let isRunning: Bool
+    /// "N steps" chip for Task/Agent calls with routed subagent activity.
+    let subagentSteps: Int?
     @Environment(\.inspectItem) private var inspectItem
 
     var body: some View {
@@ -86,6 +89,13 @@ struct ToolCallCard: View {
                 Text(name).fontWeight(.medium)
                 Text(summary).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 4)
+                if let subagentSteps, subagentSteps > 0 {
+                    Text("\(subagentSteps) steps")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                }
                 if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
                     DiffCountChips(added: diff.added, removed: diff.removed)
                 }
