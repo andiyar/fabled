@@ -62,7 +62,7 @@ final class LiveSessionTests: XCTestCase {
                     approved = true
                     await session.respond(to: perm, decision: .allowAsRequested)
                 }
-            case .toolResult(let results):
+            case .toolResult(let results, _):
                 if results.contains(where: { !$0.isError }) { toolSucceeded = true }
             case .result(let r):
                 XCTAssertTrue(r.permissionDenials.isEmpty)

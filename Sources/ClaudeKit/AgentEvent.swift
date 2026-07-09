@@ -15,13 +15,26 @@ public enum AgentEvent: Sendable, Equatable {
     case systemInit(SystemInit)
     case system(subtype: String, raw: JSONValue)
     case assistant(AssistantMessage)
-    case toolResult([ToolResult])
+    case toolResult([ToolResult], parentToolUseID: String?)
     case result(TurnResult)
     case controlRequest(ControlRequest)
     case controlResponse(ControlResponseEnvelope)
     case streamEvent(StreamEvent)
     case unknown(type: String, raw: JSONValue)
     case terminated(exitCode: Int32)
+}
+
+public extension AgentEvent {
+    /// Non-nil when the event belongs to a subagent (Task tool) side-stream.
+    /// The three event types the CLI tags: assistant, stream_event, user.
+    var parentToolUseID: String? {
+        switch self {
+        case .assistant(let message): message.parentToolUseID
+        case .streamEvent(let stream): stream.parentToolUseID
+        case .toolResult(_, let parent): parent
+        default: nil
+        }
+    }
 }
 
 /// One `stream_event` line: an Anthropic SSE event wrapped with session
@@ -69,6 +82,11 @@ public struct PermissionRequest: Sendable, Equatable {
     public let description: String?
     public let decisionReason: String?
     public let suggestions: [JSONValue]
+    /// The tool_use block this request gates — present on interactive tools.
+    public let toolUseID: String?
+    /// True for AskUserQuestion/ExitPlanMode-style requests that want a
+    /// dedicated UI, not an allow/deny prompt (probe finding 1).
+    public let requiresUserInteraction: Bool
 
     public init?(_ request: ControlRequest) {
         guard request.subtype == "can_use_tool",
@@ -80,6 +98,9 @@ public struct PermissionRequest: Sendable, Equatable {
         self.description = request.payload["description"]?.stringValue
         self.decisionReason = request.payload["decision_reason"]?.stringValue
         self.suggestions = request.payload["permission_suggestions"]?.arrayValue ?? []
+        self.toolUseID = request.payload["tool_use_id"]?.stringValue
+        self.requiresUserInteraction =
+            request.payload["requires_user_interaction"]?.boolValue ?? false
     }
 }
 

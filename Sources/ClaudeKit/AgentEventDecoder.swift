@@ -31,7 +31,8 @@ public enum AgentEventDecoder {
                     content: block["content"] ?? .null,
                     isError: block["is_error"]?.boolValue ?? false)
             }
-            return .toolResult(results)
+            return .toolResult(results,
+                               parentToolUseID: raw["parent_tool_use_id"]?.stringValue)
         case "result":
             return .result(TurnResult(
                 subtype: raw["subtype"]?.stringValue ?? "",

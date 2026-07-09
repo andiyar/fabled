@@ -121,7 +121,7 @@ final class TranscriptDecoderTests: XCTestCase {
 
     func testToolResultUserLineBecomesEvent() throws {
         let entry = try decode(#"{"type":"user","isSidechain":false,"message":{"role":"user","content":[{"tool_use_id":"toolu_01","type":"tool_result","content":"file contents here","is_error":false}]}}"#)
-        guard case .event(.toolResult(let results), _) = entry else {
+        guard case .event(.toolResult(let results, _), _) = entry else {
             return XCTFail("expected event(.toolResult), got \(entry)")
         }
         XCTAssertEqual(results.count, 1)

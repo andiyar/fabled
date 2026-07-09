@@ -11,7 +11,7 @@ public enum TimelineReducer {
             reduceStream(&items, stream)
         case .assistant(let message):
             reduceAssistant(&items, message)
-        case .toolResult(let results):
+        case .toolResult(let results, _):
             // Empty lists (synthetic user lines: interrupts, local-command
             // echoes) fall through harmlessly — nothing matches.
             for result in results { fillToolResult(&items, result) }
