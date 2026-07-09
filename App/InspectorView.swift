@@ -24,6 +24,14 @@ struct InspectorPanel: View {
     let item: TimelineItem?
     /// Sub-timeline of the inspected Task/Agent call, if any (Task 11).
     let subagentItems: [TimelineItem]?
+    /// The container's inspect action, threaded in EXPLICITLY (Task 11
+    /// drill-down). SwiftUI presentation content (`.inspector`, `.sheet`, …)
+    /// does NOT inherit `.environment` values that the presenting view applied
+    /// to itself — the presented tree gets a fresh environment from the window/
+    /// scene, so an `@Environment(\.inspectItem)` read inside the panel comes
+    /// back nil. We re-inject it here so the drill-down sub-rows can switch the
+    /// panel to a sub item (T12 gate). Do not rely on inheritance for this.
+    let inspectItem: InspectItemAction?
     @Binding var inspectedID: String?
 
     var body: some View {
@@ -49,6 +57,10 @@ struct InspectorPanel: View {
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // Injected on the concrete container that directly holds the
+            // sub-rows — no conditional/presentation boundary in between — so
+            // the drill-down TimelineItemViews reliably see the action.
+            .environment(\.inspectItem, inspectItem)
         } else {
             ContentUnavailableView(
                 "Nothing selected",

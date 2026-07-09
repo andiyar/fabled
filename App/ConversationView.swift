@@ -17,6 +17,17 @@ struct ConversationView: View {
         return nil
     }
 
+    /// One action, shared by the transcript rows and the inspector's drill-down
+    /// sub-rows. Injected DIRECTLY onto each concrete rows container (below) —
+    /// never relied on via inheritance across a `.inspector` presentation
+    /// boundary, which does not forward custom `.environment` values.
+    private var inspectAction: InspectItemAction {
+        InspectItemAction { id in
+            inspectedID = id
+            isInspectorPresented = true
+        }
+    }
+
     /// Always-visible active model: catalog display name when known,
     /// else the raw id the session reported.
     private var activeModelLabel: String {
@@ -80,6 +91,9 @@ struct ConversationView: View {
                     .frame(minHeight: geo.size.height, alignment: .top)
                 }
                 .defaultScrollAnchor(.bottom)
+                // Injected on the concrete ScrollView that directly contains the
+                // rows so ToolCallCard/RawEventView always resolve the action.
+                .environment(\.inspectItem, inspectAction)
             }
             if !session.todos.isEmpty {
                 TodoChecklistView(todos: session.todos)
@@ -96,13 +110,13 @@ struct ConversationView: View {
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
-        .environment(\.inspectItem, InspectItemAction { id in
-            inspectedID = id
-            isInspectorPresented = true
-        })
         .inspector(isPresented: $isInspectorPresented) {
+            // `inspectItem` is passed explicitly — the inspector's presented
+            // content does not inherit the `.environment(\.inspectItem)` set on
+            // the transcript, so the drill-down sub-rows need it handed in.
             InspectorPanel(item: inspectedItem,
                            subagentItems: inspectedID.flatMap { session.subagentTimelines[$0] },
+                           inspectItem: inspectAction,
                            inspectedID: $inspectedID)
                 .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
         }
