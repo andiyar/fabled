@@ -1582,10 +1582,40 @@ struct DiffCountChips: View {
 }
 ```
 
-- [ ] **Step 2: Route diffs in the panel.** In `InspectorPanel.toolDetail`, insert directly under the `Text(summary)` line (replacing the Task 7 placeholder comment):
+- [ ] **Step 2: Cache diffs — never compute LCS in a view body.** *(Amended after Task 2's quality review measured the cost: ~2.9 µs for typical fragments but **1.9 ms release / 18 ms debug** at the 500-line cap — one large Edit card would eat the frame budget on every render.)* Append to `App/InspectorView.swift`:
 
 ```swift
-        if let diff = ToolDiff.from(toolName: name, input: input) {
+/// LCS diffs are cheap for typical fragments but ~2 ms at the size cap
+/// (measured, release) — far too hot for a view body that re-renders per
+/// scroll tick. One entry per tool_use id, revalidated by input equality
+/// (streamed inputs go {} → full input once, then never change).
+@MainActor
+final class DiffCache {
+    static let shared = DiffCache()
+    private var store: [String: (input: JSONValue, diff: ToolDiff?)] = [:]
+
+    func diff(id: String, toolName: String, input: JSONValue) -> ToolDiff? {
+        if let cached = store[id], cached.input == input { return cached.diff }
+        let diff = ToolDiff.from(toolName: toolName, input: input)
+        store[id] = (input, diff)
+        return diff
+    }
+}
+```
+
+Also add this doc comment on `ToolDiff.hunks` in `Sources/FabledCore/Diff.swift` (semantic trap flagged in review — no file offsets exist in the source data):
+
+```swift
+    /// One entry per edit: a FLAT line sequence (context/insert/delete),
+    /// not a positioned unified-diff hunk. Edit inputs are fragments, so
+    /// gutter line numbers are underivable and unchanged runs are not
+    /// folded — render as-is.
+```
+
+- [ ] **Step 3: Route diffs in the panel.** In `InspectorPanel.toolDetail`, insert directly under the `Text(summary)` line (replacing the Task 7 placeholder comment):
+
+```swift
+        if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
             sectionHeader("Changes", systemImage: "plus.forwardslash.minus")
             DiffSectionView(diff: diff)
         }
@@ -1594,32 +1624,47 @@ struct DiffCountChips: View {
 and make the raw Input section skip diff tools' bulky strings — wrap the existing Input section in:
 
 ```swift
-        if ToolDiff.from(toolName: name, input: input) == nil,
+        if DiffCache.shared.diff(id: id, toolName: name, input: input) == nil,
            input != .object([:]), input != .null {
 ```
 
-(For diff tools the "Changes" section IS the input; the raw JSON added nothing but noise. `ToolDiff.from` is called twice per render — small strings, LCS is micro­seconds; do not cache prematurely.)
+(For diff tools the "Changes" section IS the input; the raw JSON added nothing but noise. Both calls hit the cache.)
 
-- [ ] **Step 3: Count chips on the compact row.** In `ToolCallCard` (Task 6 version), replace the chips placeholder comment with:
+- [ ] **Step 4: Count chips on the compact row.** In `ToolCallCard` (Task 6 version), replace the chips placeholder comment with:
 
 ```swift
-                if let diff = ToolDiff.from(toolName: name, input: input) {
+                if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
                     DiffCountChips(added: diff.added, removed: diff.removed)
                 }
 ```
 
-- [ ] **Step 4: Build + smoke**
+- [ ] **Step 5: Pin the MultiEdit malformed-edit drop** (review test gap — makes the compactMap skip a documented choice). Append to `Tests/FabledCoreTests/DiffTests.swift`:
+
+```swift
+    func testMultiEditSkipsMalformedEditsButKeepsRest() throws {
+        let input = try json(
+            #"{"file_path":"/tmp/d.swift","edits":[{"old_string":"a","new_string":"b"},{"not_an_edit":true}]}"#)
+        let diff = try XCTUnwrap(ToolDiff.from(toolName: "MultiEdit", input: input))
+        XCTAssertEqual(diff.hunks.count, 1, "malformed edits drop; valid ones survive")
+        XCTAssertEqual(diff.added, 1)
+        XCTAssertEqual(diff.removed, 1)
+    }
+```
+
+Run: `swift test --filter DiffTests 2>&1 | tail -3` — 12 tests, 0 failures.
+
+- [ ] **Step 6: Build + smoke**
 
 Run: `swift build && xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug build 2>&1 | tail -3`
 Expected: `** BUILD SUCCEEDED **`.
 
-Smoke: open a historical coding session with Edit/Write calls → rows show `+N −M` chips → inspector shows the colored unified diff for an Edit (old/new lines correct), a Write (all green), and — if the history has one — a MultiEdit (hunk per edit).
+Smoke: open a historical coding session with Edit/Write calls → rows show `+N −M` chips → inspector shows the colored unified diff for an Edit (old/new lines correct), a Write (all green), and — if the history has one — a MultiEdit (hunk per edit). Scrolling a transcript with many Edit rows stays smooth (the cache is doing its job).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git -C ~/Developer/Fabled add App
-git -C ~/Developer/Fabled commit -m "feat(app): unified diff rendering for Edit/Write/MultiEdit"
+git -C ~/Developer/Fabled/.worktrees/plan-4a add App Sources Tests
+git -C ~/Developer/Fabled/.worktrees/plan-4a commit -m "feat(app): unified diff rendering for Edit/Write/MultiEdit (cached)"
 ```
 
 ---
