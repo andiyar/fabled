@@ -83,6 +83,10 @@ struct ConversationView: View {
             }
             if !session.todos.isEmpty {
                 TodoChecklistView(todos: session.todos)
+                    // Session-scoped identity: RootView reuses this view across
+                    // live-session switches, so without it the collapse @State
+                    // leaks between sessions (T10 quality review).
+                    .id(session.id)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
                     .frame(maxWidth: 760)
