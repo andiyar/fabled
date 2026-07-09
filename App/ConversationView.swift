@@ -4,6 +4,18 @@ import FabledCore
 struct ConversationView: View {
     let session: ChatSession
 
+    /// Always-visible active model: catalog display name when known,
+    /// else the raw id the session reported.
+    private var activeModelLabel: String {
+        guard let current = session.currentModel else { return "" }
+        if let match = session.models.first(where: {
+            $0.value == current || $0.resolvedModel == current
+        }) {
+            return match.displayName
+        }
+        return current
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let note = session.versionNote {
@@ -45,6 +57,13 @@ struct ConversationView: View {
         .navigationSubtitle(session.workingDirectory.path)
         .toolbar {
             ToolbarItemGroup {
+                if session.currentModel != nil {
+                    Text(activeModelLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .help("Active model")
+                }
                 ModelPickerMenu(session: session)
                 Picker("Permissions", selection: Binding(
                     get: { session.permissionMode },

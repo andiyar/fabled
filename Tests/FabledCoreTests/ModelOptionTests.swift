@@ -30,13 +30,38 @@ final class ModelOptionTests: XCTestCase {
         XCTAssertTrue(values.contains("claude-opus-4-6"))
         XCTAssertTrue(values.contains("claude-haiku-4-5"))
 
-        // Six of the seven known models survive (opus-4-8 deduped).
+        // All but one known model survives (opus-4-8 deduped).
+        XCTAssertEqual(merged.count, catalog.count + ModelOption.knownModels.count - 1)
+    }
+
+    /// A catalog entry whose resolvedModel is the dated Opus 4.5 id
+    /// ("claude-opus-4-5-20251101") must dedupe the known "claude-opus-4-5"
+    /// alias even though the alias value never matches the dated id — merge
+    /// dedupes on the known entry's resolvedModel as well as its value.
+    func testMergedDedupesKnownAliasAgainstCatalogResolvedId() {
+        let catalog = [
+            ModelOption(value: "opus-4-5", resolvedModel: "claude-opus-4-5-20251101",
+                        displayName: "Opus 4.5", optionDescription: nil),
+        ]
+
+        let merged = ModelOption.merged(catalog: catalog)
+        let values = merged.map(\.value)
+
+        // The known claude-opus-4-5 alias is dropped, no duplicate 4.5 row.
+        XCTAssertFalse(values.contains("claude-opus-4-5"))
+        XCTAssertEqual(values.filter { $0 == "opus-4-5" }.count, 1)
+
+        // Other known models still appended.
+        XCTAssertTrue(values.contains("claude-opus-4-6"))
+        XCTAssertTrue(values.contains("claude-fable-5"))
+
+        // One known model deduped away.
         XCTAssertEqual(merged.count, catalog.count + ModelOption.knownModels.count - 1)
     }
 
     func testMergedWithEmptyCatalogReturnsAllKnownModels() {
         let merged = ModelOption.merged(catalog: [])
         XCTAssertEqual(merged.map(\.value), ModelOption.knownModels.map(\.value))
-        XCTAssertEqual(merged.count, 7)
+        XCTAssertEqual(merged.count, 8)
     }
 }

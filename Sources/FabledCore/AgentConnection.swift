@@ -84,21 +84,29 @@ public extension ModelOption {
         ModelOption(value: "claude-opus-4-8", resolvedModel: "claude-opus-4-8", displayName: "Claude Opus 4.8", optionDescription: nil),
         ModelOption(value: "claude-opus-4-7", resolvedModel: "claude-opus-4-7", displayName: "Claude Opus 4.7", optionDescription: nil),
         ModelOption(value: "claude-opus-4-6", resolvedModel: "claude-opus-4-6", displayName: "Claude Opus 4.6", optionDescription: nil),
+        ModelOption(value: "claude-opus-4-5", resolvedModel: "claude-opus-4-5-20251101", displayName: "Claude Opus 4.5", optionDescription: nil),
         ModelOption(value: "claude-sonnet-5", resolvedModel: "claude-sonnet-5", displayName: "Claude Sonnet 5", optionDescription: nil),
         ModelOption(value: "claude-sonnet-4-6", resolvedModel: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6", optionDescription: nil),
         ModelOption(value: "claude-haiku-4-5", resolvedModel: "claude-haiku-4-5", displayName: "Claude Haiku 4.5", optionDescription: nil),
     ]
 
     /// Catalog + known models, catalog entries first and authoritative;
-    /// known entries whose id already appears (as a value OR resolved id,
-    /// ignoring a "[1m]" long-context suffix) are dropped.
+    /// known entries whose value OR resolved id already appears in the
+    /// catalog (as a value OR resolved id, ignoring a "[1m]" long-context
+    /// suffix) are dropped. Matching on both sides prevents duplicates when
+    /// a known alias (e.g. `claude-opus-4-5`) and the catalog's dated id
+    /// (`claude-opus-4-5-20251101`) denote the same model.
     static func merged(catalog: [ModelOption]) -> [ModelOption] {
         var seen = Set<String>()
         for option in catalog {
             seen.insert(normalize(option.value))
             if let resolved = option.resolvedModel { seen.insert(normalize(resolved)) }
         }
-        return catalog + knownModels.filter { !seen.contains(normalize($0.value)) }
+        return catalog + knownModels.filter { known in
+            if seen.contains(normalize(known.value)) { return false }
+            if let resolved = known.resolvedModel, seen.contains(normalize(resolved)) { return false }
+            return true
+        }
     }
 
     private static func normalize(_ id: String) -> String {
