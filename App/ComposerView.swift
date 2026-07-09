@@ -5,6 +5,7 @@ struct ComposerView: View {
     let session: ChatSession
     @State private var draft = ""
     @FocusState private var isFocused: Bool
+    @State private var reviewingPlan: PlanApproval?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -22,16 +23,11 @@ struct ComposerView: View {
                         skip: { session.skipQuestions(prompt) })
                     .id(prompt.request.requestID)
                 case .planApproval(let approval):
-                    // Placeholder until Task 9's PlanApprovalViews.
-                    HStack {
-                        Text("Claude proposes a plan").font(.callout)
-                        Spacer()
-                        Button("Reject") { session.rejectPlan(approval, feedback: nil) }
-                        Button("Approve") { session.approvePlan(approval) }
-                            .buttonStyle(.borderedProminent).tint(Theme.clay)
-                    }
-                    .padding(10)
-                    .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
+                    PlanApprovalCard(
+                        approval: approval,
+                        review: { reviewingPlan = approval },
+                        approve: { session.approvePlan(approval) })
+                    .id(approval.request.requestID)
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
@@ -63,6 +59,21 @@ struct ComposerView: View {
         }
         .padding(10)
         .onAppear { isFocused = true }
+        .sheet(item: $reviewingPlan) { approval in
+            PlanReviewSheet(
+                approval: approval,
+                approve: { session.approvePlan(approval) },
+                reject: { session.rejectPlan(approval, feedback: $0) })
+        }
+        // An aborted turn abandons the gate; a stale sheet must not send
+        // decisions into the void (ChatSession's removeGate guard makes such
+        // sends no-ops, but the open sheet would still mislead).
+        .onChange(of: session.pendingGate?.requestID) {
+            if let reviewing = reviewingPlan,
+               session.pendingGates.first(where: { $0.requestID == reviewing.request.requestID }) == nil {
+                reviewingPlan = nil
+            }
+        }
     }
 
     private var canSend: Bool {
