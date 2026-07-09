@@ -61,6 +61,13 @@ Deferred:
 - **`planTitle` trims-to-empty edge.** A first line like "###" yields an empty caption instead of the "Untitled plan" fallback. Cosmetic. → backlog.
 - **Esc semantics differ across gate surfaces (note, decided).** Sheet Esc = close/decide-later; question-card Esc = Skip (commits). Matches platform convention for sheets; keep unless gate feedback says otherwise.
 
+## From Plan 4a T10 quality review (2026-07-09)
+
+Deferred:
+
+- **ConversationView is reused across live-session switches without identity.** Root cause of child-`@State` leaks: the todo card's collapse state (fixed in-task with a card-level `.id`) and the pre-existing T6 inspector state (`inspectedID`/`isInspectorPresented` persist across session switches — stale selection shows the empty panel, an open inspector stays open). The clean fix is `.id(session-identity)` on ConversationView in RootView.detail, then dropping the card-level `.id` — but audit the blast radius first: recreating the hierarchy on switch resets scroll position and would discard any @State composer draft (check where draft text lives before landing). → Plan 4b or a T12 rider.
+- **Sticky manual collapse (note, decided).** Once the user toggles the todo card, auto-collapse behavior never resumes for that session — deliberate sticky-preference semantics; revisit only if gate feedback objects.
+
 ## From final Plan 1 gate review (2026-07-08)
 
 - **No `--session-id` in SessionConfiguration** (spec lists it; `extraArguments` is the escape hatch). → Plan 2 if SessionStore wants deterministic UUIDs.

@@ -2023,6 +2023,8 @@ Brief feature 4: a pinned, live-updating progress card above the composer; colla
 
 > **Note from T5 quality review:** `ChatSession` ignores an empty TodoWrite list (`if !parsed.isEmpty { todos = parsed }`), so "latest list wins" does NOT include clearing. Pin this contract here with a test either way: if keeping the guard, add a ChatSession test that an empty write leaves todos unchanged plus a comment explaining why empty ≠ clear (malformed-write protection); if the UI needs genuine clearing, change the guard deliberately and test that instead.
 
+> **Note from T10 quality review (executed):** rows are offset-keyed per the T3 note; the card carries a session-scoped `.id` so collapse state can't leak across session switches; the manual collapse toggle is deliberately sticky for the session (auto behavior does not resume after a manual toggle).
+
 **Files:**
 - Create: `App/TodoChecklistView.swift`
 - Modify: `App/ConversationView.swift` (pin above the composer)
