@@ -12,6 +12,7 @@ struct ComposerView: View {
                 PermissionCardView(request: permission) { decision in
                     session.respond(to: permission, decision: decision)
                 }
+                .id(permission.requestID)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Message Claude…", text: $draft, axis: .vertical)
