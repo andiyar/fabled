@@ -1,8 +1,13 @@
 import SwiftUI
 import FabledCore
+import AppKit
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
+
+    private var pendingApprovals: Int {
+        app.liveSessions.reduce(0) { $0 + $1.pendingPermissions.count }
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -12,6 +17,9 @@ struct RootView: View {
             detail
         }
         .frame(minWidth: 900, minHeight: 560)
+        .onChange(of: pendingApprovals) { _, count in
+            NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+        }
         .task { await app.bootstrap() }
         .alert("Session failed", isPresented: Binding(
             get: { app.launchError != nil },

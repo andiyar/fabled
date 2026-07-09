@@ -3,7 +3,6 @@ import FabledCore
 
 struct ConversationView: View {
     let session: ChatSession
-    @State private var draft = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,27 +31,9 @@ struct ConversationView: View {
             }
             .defaultScrollAnchor(.bottom)
             Divider()
-            // Minimal inline composer — Task 11 replaces this block with
-            // ComposerView (multiline, shortcuts, stop button).
-            HStack {
-                TextField("Message Claude…", text: $draft)
-                    .textFieldStyle(.plain)
-                    .onSubmit(sendDraft)
-                Button(action: sendDraft) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2).foregroundStyle(Theme.clay)
-                }
-                .buttonStyle(.plain)
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding(10)
+            ComposerView(session: session)
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
-    }
-
-    private func sendDraft() {
-        session.send(draft)
-        draft = ""
     }
 }
