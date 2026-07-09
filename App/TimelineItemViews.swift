@@ -85,33 +85,42 @@ struct ToolCallCard: View {
     @Environment(\.inspectItem) private var inspectItem
 
     var body: some View {
-        Button {
-            inspectItem?(id)
-        } label: {
-            HStack(spacing: 6) {
-                ToolStatusIcon(isError: isError, isRunning: isRunning)
-                Text(name).fontWeight(.medium)
-                Text(summary).foregroundStyle(.secondary).lineLimit(1)
-                Spacer(minLength: 4)
-                if let subagentSteps, subagentSteps > 0 {
-                    Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(.quaternary, in: Capsule())
-                }
-                if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
-                    DiffCountChips(added: diff.added, removed: diff.removed)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundStyle(.tertiary)
+        HStack(spacing: 6) {
+            ToolStatusIcon(isError: isError, isRunning: isRunning)
+            Text(name).fontWeight(.medium)
+            Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            Spacer(minLength: 4)
+            if let subagentSteps, subagentSteps > 0 {
+                Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
             }
-            .font(.callout)
-            .contentShape(Rectangle())
+            if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
+                DiffCountChips(added: diff.added, removed: diff.removed)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
+        .font(.callout)
         .padding(8)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
+        // Tap gesture instead of a Button: a plain Button's action is NOT
+        // delivered reliably in these row contexts — the inspect action lives
+        // in an environment value whose owning view re-renders frequently
+        // (live stream ticks; the history view re-inits ~1/s from sidebar
+        // reindex), and per-render invalidation cancels the Button's mouse-up
+        // press dispatch. Real-mouse evidence 2026-07-10: Button rows were
+        // intermittent/delayed/dead while quick chevron clicks survived (short
+        // press duration); TapGesture delivery was verified firing in this
+        // exact context (2026-07-09). The gesture + contentShape sit AFTER
+        // padding/background so the entire visible card is the hit target —
+        // inside the padding they leave a dead 8 pt ring around every row.
+        .contentShape(Rectangle())
+        .onTapGesture { inspectItem?(id) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .help("Show full input/output in the inspector")
     }
 }
@@ -176,21 +185,22 @@ struct RawEventView: View {
     @Environment(\.inspectItem) private var inspectItem
 
     var body: some View {
-        Button {
-            inspectItem?(id)
-        } label: {
-            HStack(spacing: 6) {
-                Label(type, systemImage: "questionmark.square.dashed")
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
+        HStack(spacing: 6) {
+            Label(type, systemImage: "questionmark.square.dashed")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
         .padding(6)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
+        // Same rationale as ToolCallCard: TapGesture (not Button) so render
+        // churn can't cancel activation, applied outside padding/background so
+        // the whole card is the hit target.
+        .contentShape(Rectangle())
+        .onTapGesture { inspectItem?(id) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .help("Show raw event in the inspector")
     }
 }
