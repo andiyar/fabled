@@ -1673,6 +1673,8 @@ git -C ~/Developer/Fabled/.worktrees/plan-4a commit -m "feat(app): unified diff 
 
 Brief feature 2. Replaces the Task 5 placeholder. Single-select questions answer with one click when they're the whole prompt; multi-question and multi-select forms submit once, with free-text "Other" per question (any string is a legal answer — probe finding 2).
 
+> **Note from T3 quality review:** `QuestionPrompt.Option` is neither `Identifiable` nor `Hashable` — a `ForEach` over a question's options must key explicitly with `id: \.label`.
+
 **Files:**
 - Create: `App/QuestionCardView.swift`
 - Modify: `App/ComposerView.swift` (swap placeholder)
@@ -2014,6 +2016,8 @@ git -C ~/Developer/Fabled commit -m "feat(app): plan-mode review sheet + approva
 ## Task 10: TodoWrite — pinned checklist card
 
 Brief feature 4: a pinned, live-updating progress card above the composer; collapses when everything is done. Data (`ChatSession.todos`) landed in Task 5; the row summary ("2/5 done") landed in Task 3.
+
+> **Note from T3 quality review:** `TodoItem.id` is the todo's `content`, and nothing guarantees content uniqueness across a list. Do not write `ForEach(todos)` blindly — key by offset (`Array(todos.enumerated())` with `id: \.offset`) or make an explicit, documented uniqueness decision here.
 
 **Files:**
 - Create: `App/TodoChecklistView.swift`
