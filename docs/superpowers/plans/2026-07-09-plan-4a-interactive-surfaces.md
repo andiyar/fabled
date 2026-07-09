@@ -2139,6 +2139,8 @@ git -C ~/Developer/Fabled commit -m "feat(app): pinned TodoWrite checklist card"
 
 Brief feature 5: parented traffic (routed since Task 5) becomes visible — the Task/Agent row shows live sub-step count, and the inspector shows the subagent's own mini-timeline (routed through the inspector per feature 17).
 
+> **Note from T11 quality review (executed):** the steps chip is pluralized ("1 step"); the badge computation carries an observation-cost ledger comment (whole-property tracking → visible rows re-render per parented event, bounded by LazyVStack). The consolidated smoke must exercise the live chip incrementing during a Task run and sub-row click-through to full I/O.
+
 **Files:**
 - Modify: `App/TimelineItemViews.swift` (`TimelineItemView`, `ToolCallCard`)
 - Modify: `App/InspectorView.swift` (panel: drill-down section; the container passes the inspected Task call's sub-timeline as `subagentItems` — T6 quality refactor)
