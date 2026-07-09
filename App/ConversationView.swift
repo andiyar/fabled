@@ -3,6 +3,8 @@ import FabledCore
 
 struct ConversationView: View {
     let session: ChatSession
+    @State private var inspectedID: String?
+    @State private var isInspectorPresented = false
 
     /// Always-visible active model: catalog display name when known,
     /// else the raw id the session reported.
@@ -73,6 +75,16 @@ struct ConversationView: View {
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
+        .environment(\.inspectItem, InspectItemAction { id in
+            inspectedID = id
+            isInspectorPresented = true
+        })
+        .inspector(isPresented: $isInspectorPresented) {
+            InspectorPanel(items: session.timeline,
+                           subagentTimelines: session.subagentTimelines,
+                           inspectedID: $inspectedID)
+                .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
+        }
         .toolbar {
             ToolbarItemGroup {
                 if session.currentModel != nil {
@@ -98,6 +110,13 @@ struct ConversationView: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
+                Button {
+                    isInspectorPresented.toggle()
+                } label: {
+                    Image(systemName: "sidebar.right")
+                }
+                .help("Toggle inspector")
+                .keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
     }

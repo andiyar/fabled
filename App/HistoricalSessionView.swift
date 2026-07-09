@@ -6,6 +6,8 @@ struct HistoricalSessionView: View {
     @Environment(AppModel.self) private var app
     let summary: SessionSummary
     @State private var items: [TimelineItem]?
+    @State private var inspectedID: String?
+    @State private var isInspectorPresented = false
 
     var body: some View {
         Group {
@@ -33,6 +35,16 @@ struct HistoricalSessionView: View {
         }
         .navigationTitle(summary.title)
         .navigationSubtitle(summary.project.displayName)
+        .environment(\.inspectItem, InspectItemAction { id in
+            inspectedID = id
+            isInspectorPresented = true
+        })
+        .inspector(isPresented: $isInspectorPresented) {
+            InspectorPanel(items: items ?? [],
+                           subagentTimelines: [:],
+                           inspectedID: $inspectedID)
+                .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
+        }
         .toolbar {
             ToolbarItemGroup {
                 Button("Resume") { Task { await app.resume(summary, fork: false) } }

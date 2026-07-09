@@ -13,8 +13,8 @@ struct TimelineItemView: View {
             UserBubble(text: text)
         case .assistantText(_, let markdown, let isStreaming):
             AssistantTextView(markdown: markdown, isStreaming: isStreaming)
-        case .toolCall(_, let name, let summary, let input, let result, let isError, let isRunning):
-            ToolCallCard(name: name, summary: summary, input: input,
+        case .toolCall(let id, let name, let summary, let input, let result, let isError, let isRunning):
+            ToolCallCard(id: id, name: name, summary: summary, input: input,
                          result: result, isError: isError, isRunning: isRunning)
         case .permission(_, let request, let resolution):
             // Static status row — the interactive card renders in ComposerView while pending.
@@ -23,8 +23,8 @@ struct TimelineItemView: View {
             TurnSummaryView(result: result)
         case .notice(_, let text):
             NoticeView(text: text)
-        case .raw(_, let type, let raw):
-            RawEventView(type: type, raw: raw)
+        case .raw(let id, let type, let raw):
+            RawEventView(id: id, type: type, raw: raw)
         }
     }
 }
@@ -64,52 +64,39 @@ struct AssistantTextView: View {
     }
 }
 
+/// One-line tool row; all detail opens in the side inspector. Deliberately
+/// stateless — the old DisclosureGroup's @State reset when LazyVStack
+/// recycled rows (FOLLOWUPS rider, resolved by this design).
 struct ToolCallCard: View {
+    let id: String
     let name: String
     let summary: String
     let input: JSONValue
     let result: JSONValue?
     let isError: Bool?
     let isRunning: Bool
-    @State private var isExpanded = false
+    @Environment(\.inspectItem) private var inspectItem
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                if input != .object([:]), input != .null {
-                    Text(String(JSONPretty.string(input).prefix(4000)))
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-                if let result {
-                    Divider()
-                    Text(String(JSONPretty.string(result).prefix(4000)))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(isError == true ? Color.red : Color.secondary)
-                        .textSelection(.enabled)
-                }
-            }
-            .padding(.top, 4)
+        Button {
+            inspectItem?(id)
         } label: {
             HStack(spacing: 6) {
-                statusIcon
+                ToolStatusIcon(isError: isError, isRunning: isRunning)
                 Text(name).fontWeight(.medium)
                 Text(summary).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 4)
+                // Task 7 inserts diff count chips here.
+                Image(systemName: "chevron.right")
+                    .font(.caption2).foregroundStyle(.tertiary)
             }
             .font(.callout)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .padding(8)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    @ViewBuilder private var statusIcon: some View {
-        if isRunning {
-            ProgressView().controlSize(.small)
-        } else if isError == true {
-            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-        } else {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        }
+        .help("Show full input/output in the inspector")
     }
 }
 
@@ -167,18 +154,25 @@ struct NoticeView: View {
 }
 
 struct RawEventView: View {
+    let id: String
     let type: String
     let raw: JSONValue
-    @State private var isExpanded = false
+    @Environment(\.inspectItem) private var inspectItem
+
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            Text(String(JSONPretty.string(raw).prefix(4000)))
-                .font(.system(.caption2, design: .monospaced))
-                .textSelection(.enabled)
+        Button {
+            inspectItem?(id)
         } label: {
-            Label(type, systemImage: "questionmark.square.dashed")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Label(type, systemImage: "questionmark.square.dashed")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .padding(6)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
     }
