@@ -86,7 +86,9 @@ struct ToolCallCard: View {
                 Text(name).fontWeight(.medium)
                 Text(summary).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 4)
-                // Task 7 inserts diff count chips here.
+                if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
+                    DiffCountChips(added: diff.added, removed: diff.removed)
+                }
                 Image(systemName: "chevron.right")
                     .font(.caption2).foregroundStyle(.tertiary)
             }

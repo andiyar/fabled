@@ -74,6 +74,10 @@ public enum Diff {
 /// edit), Write (new content, all insertions). Anything else → nil.
 public struct ToolDiff: Equatable, Sendable {
     public let filePath: String
+    /// One entry per edit: a FLAT line sequence (context/insert/delete),
+    /// not a positioned unified-diff hunk. Edit inputs are fragments, so
+    /// gutter line numbers are underivable and unchanged runs are not
+    /// folded — render as-is.
     public let hunks: [[DiffLine]]
     public let added: Int
     public let removed: Int

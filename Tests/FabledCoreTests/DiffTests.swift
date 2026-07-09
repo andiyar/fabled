@@ -87,4 +87,13 @@ final class DiffTests: XCTestCase {
                                    input: try json(#"{"command":"ls"}"#)))
         XCTAssertNil(ToolDiff.from(toolName: "Edit", input: .null))
     }
+
+    func testMultiEditSkipsMalformedEditsButKeepsRest() throws {
+        let input = try json(
+            #"{"file_path":"/tmp/d.swift","edits":[{"old_string":"a","new_string":"b"},{"not_an_edit":true}]}"#)
+        let diff = try XCTUnwrap(ToolDiff.from(toolName: "MultiEdit", input: input))
+        XCTAssertEqual(diff.hunks.count, 1, "malformed edits drop; valid ones survive")
+        XCTAssertEqual(diff.added, 1)
+        XCTAssertEqual(diff.removed, 1)
+    }
 }
