@@ -13,23 +13,31 @@ struct ConversationView: View {
                     .padding(4)
                     .background(.yellow.opacity(0.15))
             }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(session.timeline) { item in
-                        TimelineItemView(item: item, session: session)
-                    }
-                    if session.isThinking {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Thinking…")
-                                .font(Theme.assistantFont(.callout)).italic()
-                                .foregroundStyle(.secondary)
+            // GeometryReader + minHeight makes short conversations lay out from
+            // the top (minHeight fills the viewport, top-aligned) while long
+            // ones still overflow and follow the bottom anchor while streaming.
+            GeometryReader { geo in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(session.timeline) { item in
+                            TimelineItemView(item: item, session: session)
+                        }
+                        if session.isThinking {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Thinking…")
+                                    .font(Theme.assistantFont(.callout)).italic()
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    .padding()
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: geo.size.height, alignment: .top)
                 }
-                .padding()
+                .defaultScrollAnchor(.bottom)
             }
-            .defaultScrollAnchor(.bottom)
             Divider()
             ComposerView(session: session)
         }

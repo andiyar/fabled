@@ -14,30 +14,28 @@ struct ModelPickerMenu: View {
                 Button {
                     session.setModel(option.value)
                 } label: {
-                    // macOS renders a two-Text VStack label as title + subtitle,
-                    // so surface the resolved version under the friendly name
+                    // macOS menus DON'T render a second Text in a VStack label,
+                    // so use a single-line label that folds the resolved id in
                     // (Ben wants to see that e.g. "opus" = claude-opus-4-8).
-                    if option.value == session.currentModel {
-                        Label {
-                            labelBody(for: option)
-                        } icon: {
-                            Image(systemName: "checkmark")
-                        }
+                    if isCurrent(option) {
+                        Label(labelText(for: option), systemImage: "checkmark")
                     } else {
-                        labelBody(for: option)
+                        Text(labelText(for: option))
                     }
                 }
                 .help(option.optionDescription ?? "")
             }
             Divider()
-            // Every catalog entry by its raw id — the by-id view Ben asked for.
+            // Every distinct resolved id — the by-id view Ben asked for. Dedupe
+            // by resolved id so aliases that map to the same model (e.g. Default
+            // and Opus → claude-opus-4-8[1m]) don't produce duplicate rows.
             Menu("All Models") {
-                ForEach(session.models) { option in
+                ForEach(uniqueResolvedOptions, id: \.id) { option in
+                    let id = option.resolvedModel ?? option.value
                     Button {
                         session.setModel(option.value)
                     } label: {
-                        let id = option.resolvedModel ?? option.value
-                        if option.value == session.currentModel {
+                        if isCurrent(option) {
                             Label(id, systemImage: "checkmark")
                         } else {
                             Text(id)
@@ -49,6 +47,7 @@ struct ModelPickerMenu: View {
             Button("Custom Model…") { isCustomSheetPresented = true }
         } label: {
             Label(currentDisplayName, systemImage: "cpu")
+                .labelStyle(.titleAndIcon)
         }
         .sheet(isPresented: $isCustomSheetPresented) {
             VStack(spacing: 12) {
@@ -70,21 +69,35 @@ struct ModelPickerMenu: View {
         }
     }
 
-    /// Friendly name, plus the resolved version as a subtitle when it adds
-    /// information over the display name.
-    @ViewBuilder
-    private func labelBody(for option: ModelOption) -> some View {
-        let version = option.resolvedModel ?? option.value
-        VStack(alignment: .leading) {
-            Text(option.displayName)
-            if version != option.displayName {
-                Text(version).font(.caption).foregroundStyle(.secondary)
-            }
+    /// True when this option is the session's current model. `currentModel` may
+    /// hold a catalog alias (user picked "opus") OR a full model id (from the
+    /// system init event, e.g. "claude-opus-4-8"), so match on either.
+    private func isCurrent(_ option: ModelOption) -> Bool {
+        guard let current = session.currentModel else { return false }
+        return option.value == current || option.resolvedModel == current
+    }
+
+    /// Single-line label: friendly name alone when the resolved id adds nothing,
+    /// else "Display Name — resolved-id" so the mapping is visible in one Text.
+    private func labelText(for option: ModelOption) -> String {
+        guard let resolved = option.resolvedModel,
+              resolved != option.displayName,
+              resolved != option.value else {
+            return option.displayName
+        }
+        return "\(option.displayName) — \(resolved)"
+    }
+
+    /// Catalog options deduped by resolved id, keeping the first occurrence.
+    private var uniqueResolvedOptions: [ModelOption] {
+        var seen = Set<String>()
+        return session.models.filter { option in
+            seen.insert(option.resolvedModel ?? option.value).inserted
         }
     }
 
     private var currentDisplayName: String {
-        session.models.first { $0.value == session.currentModel }?.displayName
+        session.models.first { isCurrent($0) }?.displayName
             ?? session.currentModel
             ?? "Model"
     }

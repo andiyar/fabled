@@ -10,15 +10,22 @@ struct HistoricalSessionView: View {
     var body: some View {
         Group {
             if let items {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(items) { item in
-                            TimelineItemView(item: item, session: nil)
+                // Match ConversationView: short transcripts lay out from the top
+                // (minHeight fills the viewport), long ones follow the bottom.
+                GeometryReader { geo in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(items) { item in
+                                TimelineItemView(item: item, session: nil)
+                            }
                         }
+                        .padding()
+                        .frame(maxWidth: 760, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: geo.size.height, alignment: .top)
                     }
-                    .padding()
+                    .defaultScrollAnchor(.bottom)
                 }
-                .defaultScrollAnchor(.bottom)
             } else {
                 ProgressView("Loading transcript…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

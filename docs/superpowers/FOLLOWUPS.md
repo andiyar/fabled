@@ -34,6 +34,7 @@ Surfaced by Plan 3's per-task code reviews:
 - PERF enumeration gate (<5 s) fails at ~5.5 s on the current 696-session corpus — pre-existing at the pre-Plan-3 baseline (stash-verified in Task 4), environment-bound. → recalibrate or make corpus-relative; backlog.
 - Watcher burst behavior (decision note, resolved): `SessionStore.changes` throttles at 250 ms upstream and `SearchIndex.reindex()` serializes overlapping passes, so watcher bursts are bounded (~4 passes/sec worst case) — no coalescing needed in AppModel.
 - Gate feedback wishlist: sidebar sorting options, session tagging, and general QoL organization features. → Plan 4 scoping.
+- Gate feedback — Electron-app layout parity: tool/code activity as compact summaries opening in a side inspector panel (not inline disclosure), plus bubble width tuning. → Plan 4 (conversation surfaces).
 
 ## From final Plan 1 gate review (2026-07-08)
 
