@@ -2,13 +2,43 @@
 
 Tracked items that were deliberately deferred. Source: code reviews and task reports. Pull these into the appropriate plan when their layer is next touched.
 
+## Resolved in Plan 3 (2026-07-09)
+
+- **Control-op response correlation (Plan 1).** Control ops now return their `request_id`; `AgentSession.initializeRequestID` lets ChatSession match the initialize `control_response`. → fixed in T1.
+- **`.allow(updatedInput: nil)` unverified against the real CLI (Plan 1).** Probed live and reshaped — `updatedInput` is now mandatory (echoed from the request when nil), so the old nil-payload footgun is impossible to misuse. → fixed in T2.
+- **`user` events without tool_result blocks decode to `.toolResult([])` (Plan 1).** The reducer treats these semantically-null events as no-ops. → fixed in T5 reducer.
+- **`AgentEvent` not Equatable (Plan 1).** Added via extension for SwiftUI diffing. → fixed in T1.
+- **Orphaned child on actor dealloc (I2, Plan 1).** `AgentSession` terminates its child on deinit; ChatSession owns the lifecycle. → fixed in T1.
+- **SIGPIPE on writes after child death (I3, Plan 1).** A `terminated` flag short-circuits writes and `SIGPIPE` is ignored at app startup. → fixed in T1 + T8.
+- **`SearchIndex.reindex()` unsafe under overlapping invocation (Plan 2).** Serializing guard added before the watcher→reindex wiring. → fixed in T4.
+- **File vanishing mid-reindex aborts the whole pass (Plan 2).** The vanished file is caught and skipped; the pass and pruning continue. → fixed in T4.
+- **Two title sources can disagree (Plan 2 gate review).** Resolved in the index's favor — the sidebar reads `SearchIndex.sessionSummaries()` titles from the files table. → fixed in T4/T9.
+
+## Deferred from Plan 3 (2026-07-09)
+
+Carried forward from the plan's known list:
+
+- `events`-before-`start()` still returns a dead placeholder stream (M3) — ChatSession always starts first, but the ClaudeKit API sharp edge remains. → Plan 4.
+- Unbounded AsyncStream buffers (Plan 1 M1 / Plan 2 changes-stream) — consumers drain promptly on MainActor; revisit only if profiling shows growth. → backlog.
+- Heavy `transcript(for:)` reads still run on the SessionStore executor (~0.65 s for the 52 MB pathological file) — fine for open-on-click; revisit with nonisolated reads if the sidebar ever stutters. → Plan 4 if felt.
+
+Surfaced by Plan 3's per-task code reviews:
+
+- Optimistic control ops: `setModel`/`setPermissionMode` update UI state before the (unverified) CLI ack; a rejected custom model ID leaves a stale toolbar label. No ack correlation for non-init control ops. → Plan 4.
+- Tool/raw card expansion `@State` resets when the LazyVStack recycles offscreen rows. → Plan 4 polish.
+- `AssistantTextView` re-parses the full markdown string per streaming delta (O(n²) on very long messages). → watch item; revisit if long replies stutter.
+- `HistoricalSessionView.task(id:)` has a tiny stale-assignment window on rapid session switching (no cancellation check before assignment). → Plan 4 polish.
+- `resume()` silently falls back to `$HOME` as cwd when a project directory no longer resolves. → Plan 4 (surface in UI).
+- Transcript replay hides real user prompts starting with `<` (mirrors the established title heuristic; the live view shows them). → backlog.
+- Cosmetic: the custom-model sheet keeps stale text across opens; an unknown permission mode renders an empty picker; the model-menu checkmark misaligns the icon gutter. → backlog.
+- PERF enumeration gate (<5 s) fails at ~5.5 s on the current 696-session corpus — pre-existing at the pre-Plan-3 baseline (stash-verified in Task 4), environment-bound. → recalibrate or make corpus-relative; backlog.
+- Watcher burst behavior (decision note, resolved): `SessionStore.changes` throttles at 250 ms upstream and `SearchIndex.reindex()` serializes overlapping passes, so watcher bursts are bounded (~4 passes/sec worst case) — no coalescing needed in AppModel.
+- Gate feedback wishlist: sidebar sorting options, session tagging, and general QoL organization features. → Plan 4 scoping.
+- Gate feedback — Electron-app layout parity: tool/code activity as compact summaries opening in a side inspector panel (not inline disclosure), plus bubble width tuning. → Plan 4 (conversation surfaces).
+
 ## From final Plan 1 gate review (2026-07-08)
 
-- **Control-op responses are uncorrelatable (Important).** `interrupt()`/`setModel()`/`setPermissionMode()`/`initialize` mint and discard their `request_id`, so callers can't match the CLI's `control_response`. Plan 3 needs the initialize response (slash-command catalog) — return the request id from control-op methods (or use a constant id for initialize) *before* Plan 3 consumes it. → Plan 3, early task.
-- **`.allow(updatedInput: nil)` never exercised against the real CLI.** Verify by probing before any caller relies on it. → Plan 3 probing list.
-- **`user` events without tool_result blocks decode to `.toolResult([])`** — semantically-null event consumers must ignore. Consider filtering in decoder or document. → Plan 3 reducer task.
 - **No `--session-id` in SessionConfiguration** (spec lists it; `extraArguments` is the escape hatch). → Plan 2 if SessionStore wants deterministic UUIDs.
-- **`AgentEvent` not `Equatable`** — Plan 3 SwiftUI diffing will likely want it; add via extension when needed.
 
 ## From AgentSession review (2026-07-08, Task 7)
 
@@ -16,11 +46,7 @@ Fixed in-task: trailing-event race (join read task before `.terminated`), undrai
 
 Deferred:
 
-- **Orphaned child on actor dealloc (I2).** No `deinit`; dropping an `AgentSession` without calling `terminate()` leaks a running `claude` process. Add `deinit { process?.terminate() }` + doc that `terminate()` is the intended path. → Plan 3 (ChatSession owns lifecycle; decide there).
-- **SIGPIPE on writes after child death (I3).** `try?` swallows EPIPE but the signal itself can kill the host app. Add a `terminated` flag short-circuiting `write`, and `signal(SIGPIPE, SIG_IGN)` at app startup. → Plan 3 (app-level signal setup).
-- **Unbounded AsyncStream buffer (M1).** Slow consumer grows the buffer for the session's life. Consider `.bufferingNewest(n)` or document drain-promptly requirement. → Plan 3, decided with the ChatSession consumer design.
 - **SIGTERM-only terminate (M2).** No SIGKILL escalation; a stuck child never dies. Add kill-after-timeout. → Plan 4 (session management).
-- **`events` before `start()` returns a dead placeholder stream; `alreadyStarted` is a misleading error after natural exit (M3).** Sharpen docs or API when ChatSession wraps it. → Plan 3.
 - **Byte-by-byte stdout reads (M4).** Only if profiling shows it matters. → backlog.
 - **Blocking stderr drain pins a cooperative-pool thread per live session.** `Task.detached` + blocking `read(upToCount:)` for the child's lifetime is fine at Mac-app session counts; switch to `readabilityHandler` or `handle.bytes` if session counts grow. → backlog (with M4).
 - **Dead `Process` retained after termination (M5).** Harmless; tidy when touching the file. → backlog.
@@ -31,15 +57,11 @@ Fixed in-task: out-of-window prompt leaking into titles via the title-key byte f
 
 Deferred:
 
-- **`SearchIndex.reindex()` unsafe under overlapping invocation (Important).** `known` snapshots before the `await store.projects()` suspension; two interleaved passes can both see a new file as absent → `UNIQUE(path)` violation throws the whole pass. Add an in-flight coalescing/serializing guard *before* Plan 3 wires watcher→reindex. → Plan 3, early.
-- **File vanishing mid-reindex aborts the whole pass (Important).** `Data(contentsOf:)` sits outside the per-file transaction's catch; a session deleted between stamp enumeration and read throws out of `reindex()`, skipping remaining files and the vanished-file pruning. Catch and skip that file. → Plan 3 with the item above.
 - **Heavy file I/O on the SessionStore actor executor.** `sessions(in:)`/`transcript(for:)` read+scan multi-MB files inline; one large call serializes all store callers (watcher ticks, UI). Consider `nonisolated` reads off-actor when UI + watcher share the store. → Plan 3 design.
 - **`search()` error-swallow is broader than intended (Minor).** `prepare`/`bind` sit inside `catch is SQLiteError → []`, so schema corruption reads as empty results; narrow the catch to the `step()` loop. → Plan 3 polish.
-- **`changes` AsyncStream buffers unbounded (Minor).** Slow consumer accumulates batches; consumers only need the latest — consider `.bufferingNewest(n)`. → Plan 3, with the Plan 1 M1 twin.
 - **`performScheduledRescan` enumerates `projects()` twice per tick (Minor perf).** Once inside `currentSnapshot()`, once for new-dir watching; capture one listing. → backlog.
 - **`projectCache` freezes `originalPath` at first sight (Minor).** A project unresolvable at first enumeration stays flattened forever even if the cwd later exists. Doc or re-resolve on miss. → backlog.
 - **`maxTitleLineBytes` cutoff untested (Minor test gap).** A >4096-byte title line being skipped has no pinning test. → backlog.
 - **mmap truncation edge (note).** `.mappedIfSafe` + a writer truncating/replacing a mapped session file ⇒ SIGBUS. Safe today (CLI appends only); revisit if any tooling rewrites session files.
 - **`ftsQuery` wrap-only quoting (note).** A token with an interior `"` can't match a literal quote (degrades to no-results via the narrow catch). Accepted; plan doc's "quotes are doubled" text is stale — the tests mandate wrap-only.
 - **`SearchHit` not Equatable/Hashable (note).** Add via extension if Plan 3 diffing needs it.
-- **Two title sources can disagree (from final gate review).** Sidebar titles come from windowed `SessionTitle.derive` (prompts only in first 100 lines; title lines only ≤ 4096 bytes); search-hit titles come from the index's whole-file `TitleAccumulator` pass (`files.title`). They diverge on (a) untitled sessions whose first usable prompt is past line 100, (b) title lines > 4096 bytes. Pick one authoritative source per session in Plan 3 (the index's stored title is the better candidate once the index is always-on). → Plan 3, sidebar task.

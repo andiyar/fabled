@@ -1,3 +1,5 @@
+# XcodeGen output — regenerate with `xcodegen generate`
+Fabled.xcodeproj/
 .build/
 .swiftpm/
 xcuserdata/

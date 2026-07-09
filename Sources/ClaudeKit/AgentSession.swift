@@ -11,12 +11,28 @@ public actor AgentSession {
     private var stdinPipe: Pipe?
     private var continuation: AsyncStream<AgentEvent>.Continuation?
     private var readTask: Task<Void, Never>?
+    private var isTerminated = false
 
     /// Single-consumer stream of everything the CLI emits, plus `.terminated`.
     public private(set) var events: AsyncStream<AgentEvent> = AsyncStream { $0.finish() }
 
+    /// Fixed id for the initialize handshake so consumers can correlate the
+    /// CLI's catalog response (commands, models, account) without plumbing.
+    /// One id per process is safe: each AgentSession owns its own child.
+    public static let initializeRequestID = "init"
+
     public init(configuration: SessionConfiguration) {
         self.configuration = configuration
+    }
+
+    /// Terminating via `terminate()` is the intended path; this is the
+    /// safety net for a dropped session. Dropping a Continuation does NOT
+    /// finish its stream (Plan 2 scar) — finish explicitly or a consumer
+    /// awaiting `events` hangs forever on a dead session.
+    deinit {
+        process?.terminate()
+        readTask?.cancel()
+        continuation?.finish()
     }
 
     public func start() async throws {
@@ -74,7 +90,7 @@ public actor AgentSession {
             }
         }
 
-        write(Outbound.initialize(requestID: "init-\(UUID().uuidString)"))
+        write(Outbound.initialize(requestID: Self.initializeRequestID))
     }
 
     public func send(_ text: String) {
@@ -83,31 +99,43 @@ public actor AgentSession {
 
     public func respond(to request: PermissionRequest, decision: PermissionDecision) {
         write(Outbound.permissionResponse(requestID: request.requestID,
-                                          decision: decision))
+                                          decision: decision,
+                                          requestedInput: request.input))
     }
 
-    public func interrupt() {
+    @discardableResult
+    public func interrupt() -> String {
         sendControl(subtype: "interrupt")
     }
 
-    public func setModel(_ model: String) {
+    @discardableResult
+    public func setModel(_ model: String) -> String {
         sendControl(subtype: "set_model", extra: ["model": .string(model)])
     }
 
-    public func setPermissionMode(_ mode: String) {
+    @discardableResult
+    public func setPermissionMode(_ mode: String) -> String {
         sendControl(subtype: "set_permission_mode", extra: ["mode": .string(mode)])
     }
 
     public func terminate() {
+        // Short-circuit writes immediately: between an intentional terminate()
+        // and handleTermination the pipe can die and a write would SIGPIPE.
+        isTerminated = true
         process?.terminate()
     }
 
-    private func sendControl(subtype: String, extra: [String: JSONValue] = [:]) {
+    private func sendControl(subtype: String, extra: [String: JSONValue] = [:]) -> String {
+        let requestID = UUID().uuidString
         write(Outbound.controlRequest(
-            requestID: UUID().uuidString, subtype: subtype, extra: extra))
+            requestID: requestID, subtype: subtype, extra: extra))
+        return requestID
     }
 
     private func write(_ data: Data) {
+        // After child death the pipe write raises SIGPIPE, which `try?`
+        // cannot swallow (it is a signal, not an error) — short-circuit.
+        guard !isTerminated else { return }
         try? stdinPipe?.fileHandleForWriting.write(contentsOf: data)
     }
 
@@ -116,6 +144,7 @@ public actor AgentSession {
     }
 
     private func handleTermination(exitCode: Int32) async {
+        isTerminated = true
         await readTask?.value
         continuation?.yield(.terminated(exitCode: exitCode))
         continuation?.finish()

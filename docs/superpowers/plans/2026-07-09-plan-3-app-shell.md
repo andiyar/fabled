@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **STATUS: COMPLETE — merged to master 2026-07-09.** Tasks 1–12 landed with two-stage review each; final suite 178 tests green (6 live-gated skips), live protocol suite green on CLI 2.1.205, app builds and boots. Gate amendments during execution (all reviewed + tested): dangling streamed text finalizes at turn end (T6); aborted turns clear abandoned permission gates + duplicate-respond guard (T7); `bootstrap()` idempotent for second windows (T9); launch-failure alert dismissable (T10); permission card state keyed per request (T11); null-input allow fallback + `terminate()` write guard (T1/T2 hardening). Post-plan gate fixes on-branch: claude binary resolution outside GUI PATH; model-picker labels, known-models list, active-model indicator; the CLI 2.1.205 deferred-init adaptation (disk-derived version drift warning, catalog-ack ready state, awaiting-first-message affordance, fixtures re-recorded, no-pinning decision — DECISIONS.md 2026-07-09). Manual gate verified live by Ben: sidebar/search/resume/permissions/tool-cards, streaming after first message, ⌘. interrupt, quit-with-live-session leaves no orphaned CLI process. Known pre-existing: PERF enumeration gate ~5.5s vs 5s target (baseline-verified, environment-bound). Deferred items in FOLLOWUPS.md "Deferred from Plan 3"; UX gate feedback folded into the Plan 4 brief.
+
 **Goal:** The Fabled.app a person can live in: sidebar (live sessions + searchable history), streaming conversation view, composer, permission cards, model picker — so Ben can use Fabled instead of the Electron app for ordinary coding sessions.
 
 **Architecture:** A new `FabledCore` SPM target holds everything with logic — the pure `TimelineReducer` (AgentEvent → `[TimelineItem]`), the `@Observable` view models (`ChatSession` per live conversation, `AppModel` for the app) — all tested by `swift test`. The `Fabled` app target (XcodeGen-generated `.xcodeproj`) holds only thin SwiftUI views over those models. ClaudeKit gains the protocol pieces Plan 3 needs (stream deltas, permission-response fixes, control-op correlation, SearchIndex hardening), each driven by fixtures recorded from the real CLI during plan-writing.
@@ -122,7 +124,7 @@ Fixes the two Plan-1 FOLLOWUPS Plan 3 consumes immediately: control-op methods m
 - Modify: `Sources/ClaudeKit/AgentEvent.swift` (one line: `Equatable`)
 - Modify: `Tests/ClaudeKitTests/AgentSessionTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `Tests/ClaudeKitTests/AgentSessionTests.swift`:
 
@@ -227,12 +229,12 @@ Append to `Tests/ClaudeKitTests/AgentSessionTests.swift`:
     }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter AgentSessionTests 2>&1 | tail -20`
 Expected: compile errors — `setModel` returns `Void` (cannot assign to `let modelID`), `initializeRequestID` and `AgentEvent` `Equatable` don't exist. That is the failure mode for this step.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `Sources/ClaudeKit/AgentEvent.swift`, make the enum `Equatable` (all payloads already are):
 
@@ -322,12 +324,12 @@ In `Sources/ClaudeKit/AgentSession.swift`:
                       "handshake must use the well-known initialize id")
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all tests pass (suite count grows by 4).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/ClaudeKit/AgentSession.swift Sources/ClaudeKit/AgentEvent.swift Tests/ClaudeKitTests/AgentSessionTests.swift
@@ -348,7 +350,7 @@ The 2026-07-09 probe proved `.allow(updatedInput: nil)` is rejected by the CLI (
 - Modify: `Tests/ClaudeKitTests/AgentSessionTests.swift` (new spelling)
 - Modify: `Tests/ClaudeKitTests/LiveSessionTests.swift` (one gated live test)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `Tests/ClaudeKitTests/OutboundTests.swift`:
 
@@ -450,12 +452,12 @@ Append to `Tests/ClaudeKitTests/LiveSessionTests.swift` (match the file's existi
     }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `swift build 2>&1 | tail -10`
 Expected: compile errors — `allowAsRequested` doesn't exist, `permissionResponse` has no `requestedInput:` parameter.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `Sources/ClaudeKit/Outbound.swift`, replace `PermissionDecision` and `permissionResponse`:
 
@@ -522,17 +524,17 @@ Update the two existing callers to the new spelling:
 
 If `OutboundTests.swift` has existing `permissionResponse` tests using the old signature, update them mechanically (add `requestedInput: .object([:])` and the second associated value) — do not weaken their assertions.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all pass (live test reports skipped).
 
-- [ ] **Step 5 (optional but recommended, costs ~1¢): Run the live test once**
+- [x] **Step 5 (optional but recommended, costs ~1¢): Run the live test once**
 
 Run: `CLAUDEKIT_LIVE=1 swift test --filter testLiveAllowAsRequestedRunsTool 2>&1 | tail -5`
 Expected: PASS. If it fails with denials, the CLI shape moved — STOP and report to the coordinator with the raw output.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Sources/ClaudeKit/Outbound.swift Sources/ClaudeKit/AgentSession.swift Sources/fabled-probe/main.swift Tests/ClaudeKitTests/OutboundTests.swift Tests/ClaudeKitTests/AgentSessionTests.swift Tests/ClaudeKitTests/LiveSessionTests.swift
@@ -553,7 +555,7 @@ Plan 1 deliberately deferred streaming deltas; they currently decode to `.unknow
 - Create: `Tests/ClaudeKitTests/StreamEventTests.swift`
 - Modify: `Tests/ClaudeKitTests/LiveSessionTests.swift` (one gated live test)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `Tests/ClaudeKitTests/StreamEventTests.swift`:
 
@@ -694,12 +696,12 @@ Append to `Tests/ClaudeKitTests/LiveSessionTests.swift`:
     }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter StreamEventTests 2>&1 | tail -10`
 Expected: compile errors (`.streamEvent`, `StreamEvent`, `includePartialMessages` don't exist).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `Sources/ClaudeKit/SessionConfiguration.swift` add the property and flag:
 
@@ -805,17 +807,17 @@ and the builder alongside the other static helpers:
 
 Note: `testUnknownStreamEventKindsStayTolerant` expects `.other(type: "hologram_delta")` — an unknown *event type* reports the bare type; only unknown *delta types* get the `content_block_delta/` prefix.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all pass. The zero-unknown census test proves the whole probe corpus decodes typed.
 
-- [ ] **Step 5 (optional, ~1¢): Run the live delta test once**
+- [x] **Step 5 (optional, ~1¢): Run the live delta test once**
 
 Run: `CLAUDEKIT_LIVE=1 swift test --filter testLiveStreamDeltasArrive 2>&1 | tail -5`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Sources/ClaudeKit/SessionConfiguration.swift Sources/ClaudeKit/AgentEvent.swift Sources/ClaudeKit/AgentEventDecoder.swift Tests/ClaudeKitTests/SessionConfigurationTests.swift Tests/ClaudeKitTests/StreamEventTests.swift Tests/ClaudeKitTests/LiveSessionTests.swift
@@ -832,7 +834,7 @@ The two Important Plan-2 FOLLOWUPS, fixed *before* AppModel wires the watcher to
 - Modify: `Sources/ClaudeKit/SearchIndex.swift`
 - Modify: `Tests/ClaudeKitTests/SearchIndexTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `Tests/ClaudeKitTests/SearchIndexTests.swift` (reuse the file's existing temp-corpus helpers for creating a projects root populated from `fixtures/transcripts/`; the names below assume a helper that returns `(store, index)` over a fresh temp corpus — adapt to the file's actual helpers):
 
@@ -895,12 +897,12 @@ Append to `Tests/ClaudeKitTests/SearchIndexTests.swift` (reuse the file's existi
 
 (If the existing helper corpus contains a different fixture count, adjust the literals to that corpus — the assertions' *structure* is what matters. The session ids above are the real fixture stems from `fixtures/transcripts/README.md`.)
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter SearchIndexTests 2>&1 | tail -10`
 Expected: `sessionSummaries` does not compile; the two robustness tests fail or compile-fail depending on helper shape.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `Sources/ClaudeKit/SearchIndex.swift`:
 
@@ -991,17 +993,17 @@ and change `indexFile` to accept the data instead of reading it:
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all pass, including the pre-existing SearchIndex suite.
 
-- [ ] **Step 5: Run the perf gate against the real corpus (read-only, no commit gate change)**
+- [x] **Step 5: Run the perf gate against the real corpus (read-only, no commit gate change)**
 
 Run: `CLAUDEKIT_PERF=1 swift test --filter PerformanceGateTests 2>&1 | tail -15`
 Expected: all gates still green (the chaining adds one suspension per pass, nothing per-file). If the warm-reindex gate (<1 s) regresses, STOP and report numbers.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Sources/ClaudeKit/SearchIndex.swift Tests/ClaudeKitTests/SearchIndexTests.swift
@@ -1022,7 +1024,7 @@ The pure heart of the UI. `TimelineItem` is the brief's locked vocabulary; the r
 - Create: `Sources/FabledCore/JSONPretty.swift`
 - Create: `Tests/FabledCoreTests/TimelineReducerTests.swift`
 
-- [ ] **Step 1: Add the FabledCore target**
+- [x] **Step 1: Add the FabledCore target**
 
 Replace `Package.swift`'s `products`/`targets` with:
 
@@ -1043,7 +1045,7 @@ Replace `Package.swift`'s `products`/`targets` with:
 
 Run: `mkdir -p Sources/FabledCore Tests/FabledCoreTests`
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `Tests/FabledCoreTests/TimelineReducerTests.swift`:
 
@@ -1166,12 +1168,12 @@ final class TimelineReducerTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `swift test --filter TimelineReducerTests 2>&1 | tail -10`
 Expected: compile errors — the FabledCore types don't exist yet.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Create `Sources/FabledCore/TimelineItem.swift`:
 
@@ -1373,12 +1375,12 @@ public enum TimelineReducer {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all pass (ClaudeKit suite + new FabledCore suite).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Package.swift Sources/FabledCore Tests/FabledCoreTests
@@ -1398,7 +1400,7 @@ Permissions, turn summaries, notices, raw passthrough, local permission resoluti
 - Create: `Tests/FabledCoreTests/PermissionPromptTests.swift`
 - Create: `Tests/FabledCoreTests/Support.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `Tests/FabledCoreTests/Support.swift` (fixture access — Tests/FabledCoreTests sits at the same depth as ClaudeKitTests):
 
@@ -1636,12 +1638,12 @@ final class PermissionPromptTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter "TimelineReplayTests|PermissionPromptTests" 2>&1 | tail -10`
 Expected: compile errors (`resolvePermission`, `items(fromTranscript:)`, `PermissionPrompt` missing); the unit tests for result/unknown/terminated fail (reducer currently ignores them).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `Sources/FabledCore/TimelineReducer.swift`, replace the `case .controlRequest, .result, .unknown, .terminated: break` placeholder in `reduce` with:
 
@@ -1746,12 +1748,12 @@ public enum PermissionPrompt {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all pass. If a transcript-replay count is off by a small margin, diff the reducer rules against the "on-disk transcript replays" comments — the pinned numbers come from the fixture census, not guesswork.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/FabledCore/TimelineReducer.swift Sources/FabledCore/PermissionPrompt.swift Tests/FabledCoreTests
@@ -1770,7 +1772,7 @@ The `@MainActor @Observable` model one conversation view binds to. Transport is 
 - Modify: `Tests/FabledCoreTests/Support.swift`
 - Create: `Tests/FabledCoreTests/ChatSessionTests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `Tests/FabledCoreTests/Support.swift`:
 
@@ -1968,12 +1970,12 @@ final class ChatSessionTests: XCTestCase {
 
 Note the polling loops on `recorder.entries`: outbound calls hop through a `Task`, so tests must wait, not assert immediately. Keep the loops as written (bounded by the test's own timeout).
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter ChatSessionTests 2>&1 | tail -10`
 Expected: compile errors — `ChatSession`, `AgentConnection` don't exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `Sources/FabledCore/AgentConnection.swift`:
 
@@ -2259,12 +2261,12 @@ public final class ChatSession: Identifiable {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/FabledCore/AgentConnection.swift Sources/FabledCore/ChatSession.swift Tests/FabledCoreTests/Support.swift Tests/FabledCoreTests/ChatSessionTests.swift
@@ -2284,12 +2286,12 @@ No TDD here (nothing to unit-test); the gate is a green `xcodebuild` from a comm
 - Create: `App/Theme.swift`
 - Modify: `.gitignore` (create if missing)
 
-- [ ] **Step 1: Verify xcodegen is installed**
+- [x] **Step 1: Verify xcodegen is installed**
 
 Run: `xcodegen --version`
 Expected: `Version: 2.44.1` (any ≥ 2.40 is fine). If missing: `brew install xcodegen`.
 
-- [ ] **Step 2: Write the manifest and app skeleton**
+- [x] **Step 2: Write the manifest and app skeleton**
 
 Create `project.yml`:
 
@@ -2391,7 +2393,7 @@ DerivedData/
 .build/
 ```
 
-- [ ] **Step 3: Generate and build**
+- [x] **Step 3: Generate and build**
 
 Run:
 ```bash
@@ -2400,12 +2402,12 @@ xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug build 2
 ```
 Expected: `** BUILD SUCCEEDED **`.
 
-- [ ] **Step 4: Boot it once**
+- [x] **Step 4: Boot it once**
 
 Run: `open "$(xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug -showBuildSettings 2>/dev/null | awk '/ BUILT_PRODUCTS_DIR/{print $3}')/Fabled.app"`
 Expected: a window titled Fabled appears. Quit it.
 
-- [ ] **Step 5: Verify the package suite still passes, then commit**
+- [x] **Step 5: Verify the package suite still passes, then commit**
 
 Run: `swift test 2>&1 | tail -3` — expected green (the app target is invisible to SwiftPM).
 
@@ -2428,7 +2430,7 @@ git commit -m "feat(app): XcodeGen scaffold — Fabled.app boots"
 - Modify: `App/RootView.swift`
 - Modify: `App/FabledApp.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `Tests/FabledCoreTests/Support.swift`:
 
@@ -2546,12 +2548,12 @@ final class AppModelTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter AppModelTests 2>&1 | tail -10`
 Expected: compile errors — `AppModel` doesn't exist.
 
-- [ ] **Step 3: Implement AppModel**
+- [x] **Step 3: Implement AppModel**
 
 Create `Sources/FabledCore/AppModel.swift`:
 
@@ -2734,12 +2736,12 @@ public extension ProjectFolder {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test 2>&1 | tail -5`
 Expected: all pass. The watcher test needs up to ~1 s (50 ms poll + 250 ms throttle); if it flakes, raise its timeout, never the poll rate.
 
-- [ ] **Step 5: Build the sidebar UI**
+- [x] **Step 5: Build the sidebar UI**
 
 Create `App/SidebarView.swift`:
 
@@ -2912,7 +2914,7 @@ struct FabledApp: App {
 }
 ```
 
-- [ ] **Step 6: Build and smoke-test against the real corpus**
+- [x] **Step 6: Build and smoke-test against the real corpus**
 
 Run: `xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug build 2>&1 | tail -3` — expected `** BUILD SUCCEEDED **`.
 
@@ -2921,7 +2923,7 @@ Launch the app (same `open` command as Task 8). Verify by hand:
 2. Typing in the search field returns snippets; clearing restores history.
 3. Selecting a row shows its title in the detail pane.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Sources/FabledCore/AppModel.swift Tests/FabledCoreTests App/SidebarView.swift App/RootView.swift App/FabledApp.swift
@@ -2941,7 +2943,7 @@ The conversation pane: serif assistant prose, collapsed tool cards, auto-scroll,
 - Create: `App/WelcomeView.swift`
 - Modify: `App/RootView.swift`
 
-- [ ] **Step 1: Implement the timeline renderers**
+- [x] **Step 1: Implement the timeline renderers**
 
 Create `App/TimelineItemViews.swift`:
 
@@ -3133,7 +3135,7 @@ struct RawEventView: View {
 }
 ```
 
-- [ ] **Step 2: Implement the conversation, history, and welcome panes**
+- [x] **Step 2: Implement the conversation, history, and welcome panes**
 
 Create `App/ConversationView.swift`:
 
@@ -3310,7 +3312,7 @@ Also surface launch failures — add to `RootView.body`, after `.task { … }`:
 
 (If the `.constant` binding produces a repeat-alert annoyance during smoke testing, bind it properly with a small `@State` mirror — cosmetic only, don't spend time here; Task 12 doesn't touch it.)
 
-- [ ] **Step 3: Build and smoke-test a live conversation**
+- [x] **Step 3: Build and smoke-test a live conversation**
 
 Run: `xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug build 2>&1 | tail -3` — expected `** BUILD SUCCEEDED **`. Then `swift test 2>&1 | tail -3` — still green.
 
@@ -3320,7 +3322,7 @@ Launch the app and verify by hand:
 3. Open a historical session with tool use → collapsed tool cards render; expanding shows input/result; the view opens scrolled to the bottom.
 4. Send a second message while the first is still streaming → it queues and runs after (probe finding 6).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add App
@@ -3339,7 +3341,7 @@ The full composer (multiline, Return sends, ⌘. interrupts) and the interactive
 - Modify: `App/ConversationView.swift` (swap the minimal composer out)
 - Modify: `App/RootView.swift` (dock badge)
 
-- [ ] **Step 1: Implement the permission card**
+- [x] **Step 1: Implement the permission card**
 
 Create `App/PermissionCardView.swift`:
 
@@ -3402,7 +3404,7 @@ struct PermissionCardView: View {
 }
 ```
 
-- [ ] **Step 2: Implement the composer**
+- [x] **Step 2: Implement the composer**
 
 Create `App/ComposerView.swift`:
 
@@ -3472,7 +3474,7 @@ In `App/ConversationView.swift`, delete the `@State private var draft`, the `sen
             ComposerView(session: session)
 ```
 
-- [ ] **Step 3: Dock badge for pending approvals**
+- [x] **Step 3: Dock badge for pending approvals**
 
 In `App/RootView.swift`, add `import AppKit` at the top, this computed property:
 
@@ -3490,7 +3492,7 @@ and this modifier on the `NavigationSplitView` chain:
         }
 ```
 
-- [ ] **Step 4: Build and smoke-test the permission flow**
+- [x] **Step 4: Build and smoke-test the permission flow**
 
 Run: `xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug build 2>&1 | tail -3` — expected `** BUILD SUCCEEDED **`. `swift test 2>&1 | tail -3` — green.
 
@@ -3501,7 +3503,7 @@ Launch and verify by hand (each in a fresh scratch session):
 4. Repeat with a deny message "use /tmp instead" → Claude reacts to the message in its next text.
 5. Multiline: type text with ⌥Return newlines, Return sends. While a long turn streams, ⌘. interrupts — a notice-free stop (turn summary shows `error during execution`, session stays usable — probe finding 7).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add App
@@ -3522,7 +3524,7 @@ The catalog-driven model picker with a custom-ID escape hatch, the permission-mo
 - Modify: `App/FabledApp.swift` (⌘N command)
 - Modify: `Sources/FabledCore/AppModel.swift` (`isPickingFolder`)
 
-- [ ] **Step 1: Implement the model picker**
+- [x] **Step 1: Implement the model picker**
 
 Create `App/ModelPickerMenu.swift`:
 
@@ -3590,7 +3592,7 @@ struct ModelPickerMenu: View {
 }
 ```
 
-- [ ] **Step 2: Toolbar on the conversation**
+- [x] **Step 2: Toolbar on the conversation**
 
 In `App/ConversationView.swift`, add below `.navigationSubtitle(…)`:
 
@@ -3617,7 +3619,7 @@ In `App/ConversationView.swift`, add below `.navigationSubtitle(…)`:
         }
 ```
 
-- [ ] **Step 3: Folder-picker new-session flow**
+- [x] **Step 3: Folder-picker new-session flow**
 
 In `Sources/FabledCore/AppModel.swift`, add with the other observable state:
 
@@ -3656,7 +3658,7 @@ In `App/FabledApp.swift`, add a menu command to the `WindowGroup`:
         }
 ```
 
-- [ ] **Step 4: Run the package tests, build, and smoke-test**
+- [x] **Step 4: Run the package tests, build, and smoke-test**
 
 Run: `swift test 2>&1 | tail -3` then `xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug build 2>&1 | tail -3` — both green.
 
@@ -3668,7 +3670,7 @@ Launch and verify by hand:
 5. Open an old session from the sidebar → Resume → the full history renders instantly (seeded from disk), then send "what were we doing?" → the reply shows server-side context survived (probe finding 8).
 6. Fork the same session → a *new* live session appears; the original file is untouched after chatting in the fork.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add App Sources/FabledCore/AppModel.swift
@@ -3687,7 +3689,7 @@ The brief's exit criterion, run as a scripted manual gate, then the paperwork: d
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-07-09-plan-3-app-shell.md` (status header)
 
-- [ ] **Step 1: Full verification pass**
+- [x] **Step 1: Full verification pass**
 
 ```bash
 swift test 2>&1 | tail -3
@@ -3697,7 +3699,7 @@ xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled -config
 ```
 Expected: everything green. Paste real output in the task report.
 
-- [ ] **Step 2: The polish gate (manual, launch the app once)**
+- [x] **Step 2: The polish gate (manual, launch the app once)**
 
 All in one app run, no terminal (except the final settings check):
 1. Launch → sidebar populated instantly from the warm index.
@@ -3710,7 +3712,7 @@ All in one app run, no terminal (except the final settings check):
 
 If any step fails: STOP, fix forward (new task with the coordinator), re-run the gate. Do not check the box on a partial pass.
 
-- [ ] **Step 3: Ledger the decisions**
+- [x] **Step 3: Ledger the decisions**
 
 Append to `docs/superpowers/DECISIONS.md`:
 
@@ -3722,7 +3724,7 @@ Append to `docs/superpowers/DECISIONS.md`:
 - **2026-07-09 · Resumed sessions seed their timeline from disk.** Probed live: `--resume` replays nothing on the stream-json wire (context survives server-side). Resume/Fork load the transcript through the reducer, then attach the live stream. *Revisit if:* a CLI update starts replaying (isReplay-flagged events would double-render — the seed guard would need dedupe).
 ```
 
-- [ ] **Step 4: Reconcile FOLLOWUPS.md**
+- [x] **Step 4: Reconcile FOLLOWUPS.md**
 
 In `docs/superpowers/FOLLOWUPS.md`, move these items to a new "Resolved in Plan 3 (2026-07-09)" section (keep one line each, note the fixing task): control-op correlation (T1), `.allow(updatedInput: nil)` probe (T2 — was *broken*, now impossible to misuse), `toolResult([])` no-op consumers (T5 reducer), `AgentEvent` Equatable (T1), orphaned child on dealloc I2 (T1), SIGPIPE I3 (T1 + T8), reindex reentrancy (T4), vanished-file abort (T4), title-source divergence (T4/T9).
 
@@ -3732,7 +3734,7 @@ Add new deferred items observed during Plan 3 (whatever came up in reviews), plu
 - Heavy `transcript(for:)` reads still run on the SessionStore executor (~0.65 s for the 52 MB pathological file) — fine for open-on-click; revisit with nonisolated reads if the sidebar ever stutters. → Plan 4 if felt.
 - `.alert` binding on `launchError` re-presents on repeated failures (Task 10 note) — cosmetic. → Plan 4 polish.
 
-- [ ] **Step 5: Update README.md**
+- [x] **Step 5: Update README.md**
 
 Add (or replace) a "Building" section:
 
@@ -3747,7 +3749,7 @@ Add (or replace) a "Building" section:
 - Perf gates against the real local corpus: `CLAUDEKIT_PERF=1 swift test`
 ```
 
-- [ ] **Step 6: Mark the plan complete and commit**
+- [x] **Step 6: Mark the plan complete and commit**
 
 Edit this plan's header: add `> **STATUS: COMPLETE — <date>.** …` line in the style of Plan 2, summarizing test counts and any gate amendments.
 

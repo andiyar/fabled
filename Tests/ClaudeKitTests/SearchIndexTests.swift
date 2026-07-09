@@ -201,4 +201,76 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(SearchIndex.ftsQuery(from: #"say "hi""#), #""say" ""hi""*"#)
         XCTAssertEqual(SearchIndex.ftsQuery(from: ""), "")
     }
+
+    // MARK: reindex hardening + sidebar summaries
+
+    /// A three-file corpus, nothing indexed yet: one titled real session, one
+    /// session whose whole-file title is genuinely null (a lone sidechain line
+    /// — no custom/ai title, no legacy summary, no usable first prompt), and
+    /// the quokka session (titled by its first prompt). The fixture stems are
+    /// this corpus's answer to the plan's real-project UUIDs.
+    private func makePopulatedStoreAndIndex() throws -> (SessionStore, SearchIndex) {
+        try Fixtures.transcriptData("real-titled-session.jsonl")
+            .write(to: projectDir.appendingPathComponent("real-titled-session.jsonl"))
+        try Data(("{\"isSidechain\":true,\"type\":\"user\","
+            + "\"message\":{\"role\":\"user\",\"content\":\"sidechain noise\"}}\n").utf8)
+            .write(to: projectDir.appendingPathComponent("untitled-null.jsonl"))
+        _ = try writeQuokkaSession()
+        return try makeStoreAndIndex()
+    }
+
+    func testConcurrentReindexPassesSerialize() async throws {
+        let (_, index) = try makePopulatedStoreAndIndex()
+        // Before the fix: two passes race the files-table snapshot, both see a
+        // new file as absent, and the second INSERT dies on UNIQUE(path).
+        try await withThrowingTaskGroup(of: Int.self) { group in
+            for _ in 0..<8 { group.addTask { try await index.reindex() } }
+            for try await _ in group {}   // no pass may throw
+        }
+        let fileCount = try await index.indexedFileCount()
+        XCTAssertEqual(fileCount, 3, "every session indexed exactly once")
+    }
+
+    func testVanishedFileIsSkippedNotFatal() async throws {
+        let (store, index) = try makePopulatedStoreAndIndex()
+        _ = try await index.reindex()
+
+        // Make one file unreadable — the enumeration still stamps it, the
+        // read fails, exactly like a file deleted between stat and open.
+        let project = try await store.projects()[0]
+        let stamps = try await store.sessionFileStamps(in: project)
+        let victim = stamps[0].url
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o000], ofItemAtPath: victim.path)
+        defer { try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o644], ofItemAtPath: victim.path) }
+        // Touch its mtime so the incremental check re-reads it.
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date()], ofItemAtPath: victim.path)
+
+        // Before the fix this throws out of reindex() and skips everything
+        // after the victim; after, it skips only the victim.
+        let reindexed = try await index.reindex()
+        XCTAssertEqual(reindexed, 0, "unreadable file must be skipped, not counted")
+        let fileCount = try await index.indexedFileCount()
+        XCTAssertEqual(fileCount, 3, "existing rows for the victim survive")
+    }
+
+    func testSessionSummariesComeFromIndexRows() async throws {
+        let (_, index) = try makePopulatedStoreAndIndex()
+        _ = try await index.reindex()
+        let summaries = try await index.sessionSummaries()
+        XCTAssertEqual(summaries.count, 3)
+        // Newest first.
+        let dates = summaries.map(\.lastActivity)
+        XCTAssertEqual(dates, dates.sorted(by: >))
+        // Titles are the index's whole-file titles (authoritative source).
+        let titled = summaries.first { $0.id == "real-titled-session" }
+        XCTAssertNotNil(titled)
+        let indexTitle = try await index.indexedTitle(forSessionID: titled!.id)
+        XCTAssertEqual(titled?.title, indexTitle)
+        // Untitled sessions fall back to the session id.
+        let untitled = summaries.first { $0.id == "untitled-null" }
+        XCTAssertEqual(untitled?.title, untitled?.id)
+    }
 }

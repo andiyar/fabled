@@ -60,8 +60,7 @@ final class LiveSessionTests: XCTestCase {
             case .controlRequest(let req):
                 if let perm = PermissionRequest(req) {
                     approved = true
-                    await session.respond(
-                        to: perm, decision: .allow(updatedInput: perm.input))
+                    await session.respond(to: perm, decision: .allowAsRequested)
                 }
             case .toolResult(let results):
                 if results.contains(where: { !$0.isError }) { toolSucceeded = true }
@@ -73,5 +72,68 @@ final class LiveSessionTests: XCTestCase {
         }
         XCTAssertTrue(approved, "expected a can_use_tool request for git init")
         XCTAssertTrue(toolSucceeded)
+    }
+
+    /// Regression for the 2026-07-09 probe finding: a plain approval must
+    /// actually run the tool (no ZodError denial).
+    func testLiveAllowAsRequestedRunsTool() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["CLAUDEKIT_LIVE"] == "1",
+                          "live test — set CLAUDEKIT_LIVE=1 to run")
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        var config = SessionConfiguration(workingDirectory: scratch)
+        config.model = "haiku"
+        config.extraArguments = ["--setting-sources", ""]
+
+        let session = AgentSession(configuration: config)
+        try await session.start()
+        await session.send("Run exactly this bash command: git init")
+
+        var denials: [JSONValue] = []
+        for await event in await session.events {
+            switch event {
+            case .controlRequest(let request):
+                if let permission = PermissionRequest(request) {
+                    await session.respond(to: permission, decision: .allowAsRequested)
+                }
+            case .result(let turn):
+                denials = turn.permissionDenials
+                await session.terminate()
+            case .terminated:
+                break
+            default:
+                break
+            }
+        }
+        XCTAssertTrue(denials.isEmpty, "allowAsRequested must not be denied: \(denials)")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: scratch.appendingPathComponent(".git").path),
+            "the allowed tool must actually have run")
+    }
+
+    func testLiveStreamDeltasArrive() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["CLAUDEKIT_LIVE"] == "1",
+                          "live test — set CLAUDEKIT_LIVE=1 to run")
+        var config = SessionConfiguration(
+            workingDirectory: FileManager.default.temporaryDirectory)
+        config.model = "haiku"
+        config.extraArguments = ["--setting-sources", ""]
+        let session = AgentSession(configuration: config)
+        try await session.start()
+        await session.send("Reply with one short sentence about rivers.")
+
+        var sawTextDelta = false
+        for await event in await session.events {
+            switch event {
+            case .streamEvent(let stream):
+                if case .textDelta = stream.kind { sawTextDelta = true }
+            case .result:
+                await session.terminate()
+            default:
+                break
+            }
+        }
+        XCTAssertTrue(sawTextDelta, "partial messages must produce text deltas")
     }
 }

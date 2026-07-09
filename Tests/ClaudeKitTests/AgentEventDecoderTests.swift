@@ -89,6 +89,21 @@ final class AgentEventDecoderTests: XCTestCase {
         }
     }
 
+    /// Real line from fixtures/2026-07-09-control-ops.jsonl. Top-level
+    /// `rate_limit_event` must route to `.system` (which the timeline reducer
+    /// drops), never `.unknown` — an unknown would render as a raw-JSON card
+    /// in the conversation on every rate-limit tick.
+    func testRateLimitEventRoutesToSystemNotUnknown() throws {
+        let line = Data(#"""
+        {"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1783954800,"rateLimitType":"seven_day","utilization":0.6,"isUsingOverage":false},"uuid":"315277c0-dda9-40fd-b3e4-a3248e51f193","session_id":"45247314-616b-4812-b88d-fd05ae445534"}
+        """#.utf8)
+        guard case .system(let subtype, let raw) = try AgentEventDecoder.decode(line) else {
+            return XCTFail("rate_limit_event must decode as .system")
+        }
+        XCTAssertEqual(subtype, "rate_limit_event")
+        XCTAssertEqual(raw["rate_limit_info"]?["utilization"], .number(0.6))
+    }
+
     func testDecodesCanUseToolControlRequest() throws {
         let line = Data(#"""
         {"type":"control_request","request_id":"4565ced1-e35b-4fbc-bb6a-c87dc03b4747","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"git init","description":"Initialize a new git repository"},"description":"Initialize a new git repository","permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"git init *"}],"behavior":"allow","destination":"localSettings"}],"decision_reason":"This command requires approval"}}

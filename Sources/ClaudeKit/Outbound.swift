@@ -1,8 +1,19 @@
 import Foundation
 
-public enum PermissionDecision: Sendable {
-    case allow(updatedInput: JSONValue?)
+public enum PermissionDecision: Sendable, Equatable {
+    /// `updatedInput: nil` means "run with the input exactly as requested".
+    /// The CLI *requires* the `updatedInput` field (Zod-validated; omitting
+    /// it denies the tool — fixtures/2026-07-09-perm-allow-noinput.jsonl),
+    /// so encoding substitutes the request's own input.
+    /// `updatedPermissions`: pass the request's `permission_suggestions`
+    /// entries verbatim to persist an always-allow rule (the CLI writes it
+    /// to the suggestion's `destination`).
+    case allow(updatedInput: JSONValue?, updatedPermissions: [JSONValue]?)
     case deny(message: String?)
+
+    /// Plain approval: original input, no persisted rules.
+    public static let allowAsRequested = PermissionDecision.allow(
+        updatedInput: nil, updatedPermissions: nil)
 }
 
 public enum Outbound {
@@ -40,13 +51,20 @@ public enum Outbound {
     }
 
     public static func permissionResponse(
-        requestID: String, decision: PermissionDecision
+        requestID: String, decision: PermissionDecision, requestedInput: JSONValue
     ) -> Data {
         var inner: [String: JSONValue]
         switch decision {
-        case .allow(let updatedInput):
-            inner = ["behavior": .string("allow")]
-            if let updatedInput { inner["updatedInput"] = updatedInput }
+        case .allow(let updatedInput, let updatedPermissions):
+            // Inputless requests decode as .null; Zod requires a record, so map null → {}.
+            let fallback = requestedInput == .null ? JSONValue.object([:]) : requestedInput
+            inner = [
+                "behavior": .string("allow"),
+                "updatedInput": updatedInput ?? fallback,
+            ]
+            if let updatedPermissions, !updatedPermissions.isEmpty {
+                inner["updatedPermissions"] = .array(updatedPermissions)
+            }
         case .deny(let message):
             inner = ["behavior": .string("deny")]
             if let message { inner["message"] = .string(message) }
