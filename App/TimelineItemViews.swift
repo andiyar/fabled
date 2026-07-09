@@ -85,31 +85,38 @@ struct ToolCallCard: View {
     @Environment(\.inspectItem) private var inspectItem
 
     var body: some View {
-        Button {
-            inspectItem?(id)
-        } label: {
-            HStack(spacing: 6) {
-                ToolStatusIcon(isError: isError, isRunning: isRunning)
-                Text(name).fontWeight(.medium)
-                Text(summary).foregroundStyle(.secondary).lineLimit(1)
-                Spacer(minLength: 4)
-                if let subagentSteps, subagentSteps > 0 {
-                    Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(.quaternary, in: Capsule())
-                }
-                if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
-                    DiffCountChips(added: diff.added, removed: diff.removed)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundStyle(.tertiary)
+        HStack(spacing: 6) {
+            ToolStatusIcon(isError: isError, isRunning: isRunning)
+            Text(name).fontWeight(.medium)
+            Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            Spacer(minLength: 4)
+            if let subagentSteps, subagentSteps > 0 {
+                Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
             }
-            .font(.callout)
-            .contentShape(Rectangle())
+            if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
+                DiffCountChips(added: diff.added, removed: diff.removed)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
+        .font(.callout)
+        .contentShape(Rectangle())
+        // Tap gesture instead of a Button: a plain Button's action is NOT
+        // delivered in these row contexts — the inspect action lives in an
+        // environment value whose owning view re-renders frequently (live
+        // stream ticks; the history view re-inits ~1/s from sidebar reindex),
+        // and that per-render invalidation cancels the Button's mouse-up press
+        // dispatch, so clicks silently no-op. TapGesture delivery was verified
+        // firing in the exact same context (empirical, 2026-07-09). The
+        // Equatable id on InspectItemAction further stabilizes the value; both
+        // guards together keep row activation reliable.
+        .onTapGesture { inspectItem?(id) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .padding(8)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
         .help("Show full input/output in the inspector")
@@ -176,21 +183,22 @@ struct RawEventView: View {
     @Environment(\.inspectItem) private var inspectItem
 
     var body: some View {
-        Button {
-            inspectItem?(id)
-        } label: {
-            HStack(spacing: 6) {
-                Label(type, systemImage: "questionmark.square.dashed")
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.caption2).foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
+        HStack(spacing: 6) {
+            Label(type, systemImage: "questionmark.square.dashed")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
-        .help("Show raw event in the inspector")
+        .contentShape(Rectangle())
+        // Tap gesture instead of a Button — see ToolCallCard: plain-Button
+        // actions are not delivered in these row contexts (env-value churn
+        // cancels press dispatch), while TapGesture delivery is reliable.
+        .onTapGesture { inspectItem?(id) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .padding(6)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
+        .help("Show raw event in the inspector")
     }
 }

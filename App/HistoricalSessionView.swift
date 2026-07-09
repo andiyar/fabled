@@ -18,30 +18,24 @@ struct HistoricalSessionView: View {
     /// Injected directly onto the concrete rows ScrollView (main timeline) and
     /// handed explicitly to InspectorPanel (drill-down) — never relied on via
     /// inheritance across the `.inspector` presentation boundary.
+    /// `id` gives the action a stable Equatable identity so the environment
+    /// value does not churn per render (see InspectItemAction / the row-click
+    /// note in TimelineItemViews.swift for WHY that matters).
     private var inspectAction: InspectItemAction {
-        InspectItemAction { id in
+        InspectItemAction(id: "historical-\(summary.id)") { id in
             inspectedID = id
             isInspectorPresented = true
         }
     }
 
     var body: some View {
-        // The presentation/structural modifiers below (.inspector, .toolbar,
-        // .navigationTitle, .task) MUST attach to this always-present concrete
-        // VStack — the exact shape ConversationView uses, which is the only
-        // configuration we have observed the inspector actually present in.
-        //
-        // WHY this matters: this view previously rooted on `Group { if let items
-        // { rows } else { ProgressView } }` with the modifiers on the Group. A
-        // Group forwards its modifiers to its child, and here the child is a
-        // conditional whose identity SWAPS (ProgressView → ScrollView) when
-        // `.task` finishes loading. `.inspector(isPresented:)` bound to that
-        // swapping conditional never established a presentation host, so row
-        // clicks set `isInspectorPresented = true` but no panel ever appeared
-        // (and the ⌥⌘I toggle, added below, would have failed the same way).
-        // Hosting the modifiers on a stable concrete root, with the loading/
-        // loaded conditional nested INSIDE, removes that swap from the
-        // presentation path entirely.
+        // Presentation/structural modifiers (.inspector, .toolbar,
+        // .navigationTitle, .task) attach to this always-present concrete
+        // VStack, mirroring ConversationView's proven-working shape, rather than
+        // to a `Group` whose conditional child identity swaps (ProgressView →
+        // ScrollView) once `.task` loads. Attaching a presentation modifier to a
+        // stable concrete root — not a Group over a swapping branch — is the
+        // boring, reliable shape; the loading/loaded conditional nests INSIDE.
         VStack(spacing: 0) {
             if let items {
                 // Match ConversationView: short transcripts lay out from the top

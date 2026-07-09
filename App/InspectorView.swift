@@ -4,9 +4,21 @@ import FabledCore
 
 /// Cards request inspection by timeline-item id; the conversation container
 /// owns the panel state.
-struct InspectItemAction {
+///
+/// Equatable via a stable `id`. The `action` closure is rebuilt every time the
+/// owning view's body runs (it captures the current @State), so two closures can
+/// never be compared — yet the action is semantically the SAME for a given
+/// container. We therefore tag the value with a container-stable id
+/// ("conversation-<session>", "historical-<summary>") and compare on that.
+/// This matters because the value rides in `@Environment`: a non-Equatable
+/// environment value looks "changed" on every render, invalidating the rows
+/// subtree mid-interaction, which was cancelling plain-Button press dispatch on
+/// the rows (see the row-activation note in TimelineItemViews.swift).
+struct InspectItemAction: Equatable {
+    let id: String
     let action: (String) -> Void
     func callAsFunction(_ id: String) { action(id) }
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
 }
 
 extension EnvironmentValues {

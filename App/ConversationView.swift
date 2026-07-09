@@ -22,7 +22,9 @@ struct ConversationView: View {
     /// never relied on via inheritance across a `.inspector` presentation
     /// boundary, which does not forward custom `.environment` values.
     private var inspectAction: InspectItemAction {
-        InspectItemAction { id in
+        // Stable id → Equatable environment value that does not churn per render
+        // (see InspectItemAction / the row-activation note in TimelineItemViews).
+        InspectItemAction(id: "conversation-\(session.id)") { id in
             inspectedID = id
             isInspectorPresented = true
         }
