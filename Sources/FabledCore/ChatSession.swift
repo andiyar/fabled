@@ -1,6 +1,7 @@
 import ClaudeKit
 import Foundation
 import Observation
+import os
 
 /// One live conversation: owns the transport, folds events into the
 /// timeline on the main actor, and exposes everything the views bind to.
@@ -190,7 +191,15 @@ public final class ChatSession: Identifiable {
 
     // MARK: - Event handling
 
+    /// Debug-level wire trace: `log stream --level debug --predicate
+    /// 'subsystem == "dev.fabled.Fabled"'`. Case names only — payloads can
+    /// be megabytes.
+    private static let wireLog = Logger(
+        subsystem: "dev.fabled.Fabled", category: "protocol")
+
     private func handle(_ event: AgentEvent) {
+        let tag = Mirror(reflecting: event).children.first?.label ?? "terminated"
+        Self.wireLog.debug("event \(tag, privacy: .public) [\(self.id, privacy: .public)]")
         switch event {
         case .systemInit(let info):
             self.info = info
