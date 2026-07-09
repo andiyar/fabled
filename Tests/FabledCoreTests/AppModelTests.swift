@@ -63,6 +63,26 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    func testDoubleBootstrapIsHarmless() async throws {
+        // A second window's RootView calls bootstrap() on the shared model;
+        // it must be a no-op (no second changes subscriber, no double reindex).
+        let (model, root) = try makeModel(pollInterval: .milliseconds(50))
+        await model.bootstrap()
+        await model.bootstrap()
+        XCTAssertEqual(model.history.first?.sessions.count, 3)
+
+        let project = root.appendingPathComponent("-tmp-fabled-demo")
+        try FileManager.default.copyItem(
+            at: CoreFixtures.fixturesDir
+                .appendingPathComponent("transcripts/real-titled-session.jsonl"),
+            to: project.appendingPathComponent("bbbbbbbb-0000-0000-0000-000000000002.jsonl"))
+
+        await waitUntil(timeout: .seconds(10), "watcher-driven refresh after double bootstrap") {
+            model.history.first?.sessions.count == 4
+        }
+        XCTAssertEqual(model.history.first?.sessions.count, 4)
+    }
+
     func testHistoricalTimeline() async throws {
         let (model, _) = try makeModel()
         await model.bootstrap()

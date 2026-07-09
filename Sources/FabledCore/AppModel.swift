@@ -55,6 +55,11 @@ public final class AppModel {
     /// Instant history from the warm index, then a catch-up reindex, then
     /// watcher-driven refreshes for as long as the app lives.
     public func bootstrap() async {
+        // App-global model: a second window's RootView calls bootstrap()
+        // again via .task. It observes the same shared state; bootstrap must
+        // run once or we'd leak the first watchTask and double-subscribe to
+        // store.changes (double reindex on every file change).
+        guard watchTask == nil else { return }
         await refreshHistory()
         watchTask = Task { [weak self] in
             guard let changes = await self?.store.changes else { return }
