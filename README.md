@@ -34,13 +34,17 @@ No grand roadmap here — this is scoped out plan by plan (coordinated with Fabl
 - [x] `fabled-probe` — small CLI for recording/verifying live protocol behaviour against a real `claude` binary
 - [x] 25 tests, fixture-driven, 2 live-gated
 
-### Plan 2 — SessionStore + history search
-- [x] Full TDD plan written (11 tasks, complete code, nothing left to design)
-- [x] Transcript fixtures recorded (3 real sessions + synthetic edge cases)
-- [ ] Implementation — not started
+### Plan 2 — SessionStore + history search ✅
+- [x] Transcript decoding for on-disk session files (fixtures from 3 real sessions + synthetic edge cases)
+- [x] SessionStore — project/session enumeration, titles, live change watching (kqueue + mtime poll)
+- [x] SQLite FTS5 search index over the whole session corpus, warm-reindex under a second
+- [x] Merged to master
 
 ### Plan 3 — App shell
-- [ ] Design brief only, not yet expanded into a working plan
+- [x] FabledCore view models (ChatSession, AppModel, TimelineReducer) — fully `swift test`-covered
+- [x] SwiftUI app: sidebar (live + searchable history), streaming conversation view, composer, permission cards, model picker
+- [x] Session lifecycle: new/resume/fork from disk, folder picker, clean child teardown
+- [ ] Code complete on the `plan-3-app-shell` branch — manual polish gate pending
 
 ### Plan 4 — Full surfaces
 - [ ] Design brief only, not yet expanded into a working plan

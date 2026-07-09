@@ -17,7 +17,7 @@ struct TimelineItemView: View {
             ToolCallCard(name: name, summary: summary, input: input,
                          result: result, isError: isError, isRunning: isRunning)
         case .permission(_, let request, let resolution):
-            // Static rendering; Task 11 swaps in the interactive card.
+            // Static status row — the interactive card renders in ComposerView while pending.
             PermissionStatusView(request: request, resolution: resolution)
         case .turnSummary(_, let result):
             TurnSummaryView(result: result)
