@@ -53,9 +53,6 @@ struct HistoricalSessionView: View {
                         .frame(minHeight: geo.size.height, alignment: .top)
                     }
                     .defaultScrollAnchor(.bottom)
-                    // Injected on the concrete rows container so
-                    // ToolCallCard/RawEventView always resolve the action.
-                    .environment(\.inspectItem, inspectAction)
                 }
             } else {
                 ProgressView("Loading transcript…")
@@ -64,6 +61,9 @@ struct HistoricalSessionView: View {
         }
         .navigationTitle(summary.title)
         .navigationSubtitle(summary.project.displayName)
+        // Top-level chain, above .inspector — mirrors ConversationView, the
+        // empirically working configuration (see 2026-07-09 note there).
+        .environment(\.inspectItem, inspectAction)
         .inspector(isPresented: $isInspectorPresented) {
             // Threaded in explicitly — presented inspector content does not
             // inherit the transcript's `.environment(\.inspectItem)`.

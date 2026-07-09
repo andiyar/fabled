@@ -93,9 +93,6 @@ struct ConversationView: View {
                     .frame(minHeight: geo.size.height, alignment: .top)
                 }
                 .defaultScrollAnchor(.bottom)
-                // Injected on the concrete ScrollView that directly contains the
-                // rows so ToolCallCard/RawEventView always resolve the action.
-                .environment(\.inspectItem, inspectAction)
             }
             if !session.todos.isEmpty {
                 TodoChecklistView(todos: session.todos)
@@ -112,6 +109,10 @@ struct ConversationView: View {
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
+        // On the top-level chain, ABOVE .inspector — the one attachment point
+        // where row activation is empirically reliable (2026-07-09 debugging:
+        // attaching this to the rows ScrollView broke Button dispatch there).
+        .environment(\.inspectItem, inspectAction)
         .inspector(isPresented: $isInspectorPresented) {
             // `inspectItem` is passed explicitly — the inspector's presented
             // content does not inherit the `.environment(\.inspectItem)` set on
