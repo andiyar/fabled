@@ -83,12 +83,12 @@ struct InspectorPanel: View {
             Text(name).font(.title3).fontWeight(.semibold)
         }
         Text(summary).font(.callout).foregroundStyle(.secondary)
-        if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
+        let diff = DiffCache.shared.diff(id: id, toolName: name, input: input)
+        if let diff {
             sectionHeader("Changes", systemImage: "plus.forwardslash.minus")
             DiffSectionView(diff: diff)
         }
-        if DiffCache.shared.diff(id: id, toolName: name, input: input) == nil,
-           input != .object([:]), input != .null {
+        if diff == nil, input != .object([:]), input != .null {
             sectionHeader("Input", systemImage: "arrow.down.circle")
             monospacedBlock(JSONPretty.string(input))
         }
@@ -216,7 +216,10 @@ final class DiffCache {
     func diff(id: String, toolName: String, input: JSONValue) -> ToolDiff? {
         if let cached = store[id], cached.input == input { return cached.diff }
         let diff = ToolDiff.from(toolName: toolName, input: input)
-        store[id] = (input, diff)
+        // Cache only real diffs: for non-diff tools ToolDiff.from is an O(1)
+        // fast-fail, and skipping them keeps the cache from retaining every
+        // tool input for the app's lifetime (T7 quality review).
+        if diff != nil { store[id] = (input, diff) }
         return diff
     }
 }
