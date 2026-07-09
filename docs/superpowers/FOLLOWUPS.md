@@ -44,6 +44,14 @@ Deferred:
 - **DiffSectionView renders every diff line in a non-lazy VStack.** A multi-thousand-line Write builds thousands of views on inspector-open in one shot. Cap rendered lines with a "+M more lines" affordance, or fall back to the plain monospaced block above a threshold. → backlog.
 - **Optional engine test pins not yet written.** All-edits-malformed MultiEdit → nil; empty edits array → nil; Write missing content → nil; MultiEdit missing file_path → nil. → backlog.
 
+## From Plan 4a T8 quality review (2026-07-09)
+
+Deferred:
+
+- **QuestionCardView a11y.** Custom radio/checkbox option rows carry no `.accessibilityAddTraits(.isSelected)` and aren't grouped as single a11y elements, so VoiceOver can't convey selection state; single-shot mode is also mouse-dependent unless Full Keyboard Access is on (no Answer button, send ⌘⏎ disabled while a gate shows). → backlog (a11y pass).
+- **Answer-assembly logic is untestable where it lives.** Catalog ordering, ", " join, option-wins-over-free-text, trim, and free-text-alone completeness (probe finding 2) are private methods in the App-target view. Extract a pure `QuestionPrompt.assembleAnswers(selections:otherText:)` into FabledCore so FabledCoreTests can pin it — same pattern as the DiffCache relocation note above. → backlog.
+- **No height bound on long question forms.** 10+ options grow the composer card unbounded; wrap in a ScrollView with max height if long forms appear in practice. → backlog.
+
 ## From final Plan 1 gate review (2026-07-08)
 
 - **No `--session-id` in SessionConfiguration** (spec lists it; `extraArguments` is the escape hatch). → Plan 2 if SessionStore wants deterministic UUIDs.
