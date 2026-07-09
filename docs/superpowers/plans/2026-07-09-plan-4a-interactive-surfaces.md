@@ -1490,6 +1490,8 @@ git -C ~/Developer/Fabled commit -m "feat(app): side inspector replaces inline t
 
 Brief feature 1: Edit/Write/MultiEdit render as diffs with +/− counts; collapsed row shows counts, the inspector shows the full unified diff (routed per feature 17).
 
+> **Note from T5 quality review:** subagent tool traffic early-returns into `ChatSession.subagentTimelines` and never passes through the main event path. Anything here that caches or renders diffs must source subagent edits from `subagentTimelines` items (Task 11's drill-down) — they will not appear on the main timeline path.
+
 **Files:**
 - Modify: `App/InspectorView.swift` (diff section)
 - Modify: `App/TimelineItemViews.swift` (`ToolCallCard` chips)
@@ -2018,6 +2020,8 @@ git -C ~/Developer/Fabled commit -m "feat(app): plan-mode review sheet + approva
 Brief feature 4: a pinned, live-updating progress card above the composer; collapses when everything is done. Data (`ChatSession.todos`) landed in Task 5; the row summary ("2/5 done") landed in Task 3.
 
 > **Note from T3 quality review:** `TodoItem.id` is the todo's `content`, and nothing guarantees content uniqueness across a list. Do not write `ForEach(todos)` blindly — key by offset (`Array(todos.enumerated())` with `id: \.offset`) or make an explicit, documented uniqueness decision here.
+
+> **Note from T5 quality review:** `ChatSession` ignores an empty TodoWrite list (`if !parsed.isEmpty { todos = parsed }`), so "latest list wins" does NOT include clearing. Pin this contract here with a test either way: if keeping the guard, add a ChatSession test that an empty write leaves todos unchanged plus a comment explaining why empty ≠ clear (malformed-write protection); if the UI needs genuine clearing, change the guard deliberately and test that instead.
 
 **Files:**
 - Create: `App/TodoChecklistView.swift`
