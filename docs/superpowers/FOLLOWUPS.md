@@ -25,7 +25,7 @@ Carried forward from the plan's known list:
 Surfaced by Plan 3's per-task code reviews:
 
 - Optimistic control ops: `setModel`/`setPermissionMode` update UI state before the (unverified) CLI ack; a rejected custom model ID leaves a stale toolbar label. No ack correlation for non-init control ops. → Plan 4.
-- Tool/raw card expansion `@State` resets when the LazyVStack recycles offscreen rows. → Plan 4 polish.
+- ~~Tool/raw card expansion `@State` resets when the LazyVStack recycles offscreen rows.~~ → resolved in Plan 4a Task 6: the inspector design removed per-row expansion state entirely.
 - `AssistantTextView` re-parses the full markdown string per streaming delta (O(n²) on very long messages). → watch item; revisit if long replies stutter.
 - `HistoricalSessionView.task(id:)` has a tiny stale-assignment window on rapid session switching (no cancellation check before assignment). → Plan 4 polish.
 - `resume()` silently falls back to `$HOME` as cwd when a project directory no longer resolves. → Plan 4 (surface in UI).

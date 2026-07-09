@@ -27,7 +27,7 @@ struct HistoricalSessionView: View {
                             }
                         }
                         .padding()
-                        .frame(maxWidth: 760, alignment: .leading)
+                        .frame(maxWidth: Theme.contentMaxWidth, alignment: .leading)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: geo.size.height, alignment: .top)
                     }

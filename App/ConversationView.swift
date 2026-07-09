@@ -75,7 +75,7 @@ struct ConversationView: View {
                         }
                     }
                     .padding()
-                    .frame(maxWidth: 760, alignment: .leading)
+                    .frame(maxWidth: Theme.contentMaxWidth, alignment: .leading)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: geo.size.height, alignment: .top)
                 }
@@ -89,7 +89,7 @@ struct ConversationView: View {
                     .id(session.id)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
-                    .frame(maxWidth: 760)
+                    .frame(maxWidth: Theme.contentMaxWidth)
             }
             Divider()
             ComposerView(session: session)
