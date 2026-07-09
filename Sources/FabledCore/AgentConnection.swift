@@ -72,3 +72,36 @@ public struct ModelOption: Sendable, Equatable, Identifiable {
         self.optionDescription = optionDescription
     }
 }
+
+public extension ModelOption {
+    /// Manually maintained list of all currently available Claude models
+    /// (Ben's explicit request, 2026-07-09): the CLI's initialize catalog
+    /// only advertises a subset, so the picker merges this in. Update by
+    /// hand when Anthropic ships or retires models — IDs are exact, no
+    /// date suffixes.
+    static let knownModels: [ModelOption] = [
+        ModelOption(value: "claude-fable-5", resolvedModel: "claude-fable-5", displayName: "Claude Fable 5", optionDescription: nil),
+        ModelOption(value: "claude-opus-4-8", resolvedModel: "claude-opus-4-8", displayName: "Claude Opus 4.8", optionDescription: nil),
+        ModelOption(value: "claude-opus-4-7", resolvedModel: "claude-opus-4-7", displayName: "Claude Opus 4.7", optionDescription: nil),
+        ModelOption(value: "claude-opus-4-6", resolvedModel: "claude-opus-4-6", displayName: "Claude Opus 4.6", optionDescription: nil),
+        ModelOption(value: "claude-sonnet-5", resolvedModel: "claude-sonnet-5", displayName: "Claude Sonnet 5", optionDescription: nil),
+        ModelOption(value: "claude-sonnet-4-6", resolvedModel: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6", optionDescription: nil),
+        ModelOption(value: "claude-haiku-4-5", resolvedModel: "claude-haiku-4-5", displayName: "Claude Haiku 4.5", optionDescription: nil),
+    ]
+
+    /// Catalog + known models, catalog entries first and authoritative;
+    /// known entries whose id already appears (as a value OR resolved id,
+    /// ignoring a "[1m]" long-context suffix) are dropped.
+    static func merged(catalog: [ModelOption]) -> [ModelOption] {
+        var seen = Set<String>()
+        for option in catalog {
+            seen.insert(normalize(option.value))
+            if let resolved = option.resolvedModel { seen.insert(normalize(resolved)) }
+        }
+        return catalog + knownModels.filter { !seen.contains(normalize($0.value)) }
+    }
+
+    private static func normalize(_ id: String) -> String {
+        id.hasSuffix("[1m]") ? String(id.dropLast(4)) : id
+    }
+}

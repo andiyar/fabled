@@ -31,14 +31,13 @@ struct ModelPickerMenu: View {
             // and Opus → claude-opus-4-8[1m]) don't produce duplicate rows.
             Menu("All Models") {
                 ForEach(uniqueResolvedOptions, id: \.id) { option in
-                    let id = option.resolvedModel ?? option.value
                     Button {
                         session.setModel(option.value)
                     } label: {
                         if isCurrent(option) {
-                            Label(id, systemImage: "checkmark")
+                            Label(labelText(for: option), systemImage: "checkmark")
                         } else {
-                            Text(id)
+                            Text(labelText(for: option))
                         }
                     }
                 }
@@ -88,10 +87,11 @@ struct ModelPickerMenu: View {
         return "\(option.displayName) — \(resolved)"
     }
 
-    /// Catalog options deduped by resolved id, keeping the first occurrence.
+    /// Catalog merged with the hardcoded known-models list (catalog first and
+    /// authoritative), deduped by resolved id, keeping the first occurrence.
     private var uniqueResolvedOptions: [ModelOption] {
         var seen = Set<String>()
-        return session.models.filter { option in
+        return ModelOption.merged(catalog: session.models).filter { option in
             seen.insert(option.resolvedModel ?? option.value).inserted
         }
     }
