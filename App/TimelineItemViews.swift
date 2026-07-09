@@ -14,6 +14,10 @@ struct TimelineItemView: View {
         case .assistantText(_, let markdown, let isStreaming):
             AssistantTextView(markdown: markdown, isStreaming: isStreaming)
         case .toolCall(let id, let name, let summary, let input, let result, let isError, let isRunning):
+            // Reads the whole subagentTimelines property (Observation tracks
+            // per stored property), so every visible tool row re-renders per
+            // parented event — bounded by LazyVStack's visible rows; revisit
+            // if a busy subagent janks the transcript (T11 review).
             ToolCallCard(id: id, name: name, summary: summary, input: input,
                          result: result, isError: isError, isRunning: isRunning,
                          subagentSteps: session?.subagentTimelines[id]?.count)
@@ -90,7 +94,7 @@ struct ToolCallCard: View {
                 Text(summary).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 4)
                 if let subagentSteps, subagentSteps > 0 {
-                    Text("\(subagentSteps) steps")
+                    Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5).padding(.vertical, 1)
