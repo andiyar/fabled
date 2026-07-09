@@ -2,7 +2,9 @@ import ClaudeKit
 
 /// Pure translation from protocol events to UI items. This is where
 /// correctness lives — every behavior is replay-tested against recorded
-/// fixtures.
+/// fixtures. Routing is the caller's job: events with a parentToolUseID
+/// belong to a subagent sub-timeline (ChatSession routes them); reduce()
+/// renders whatever it is handed.
 public enum TimelineReducer {
     public static func reduce(_ items: [TimelineItem], _ event: AgentEvent) -> [TimelineItem] {
         var items = items
@@ -18,12 +20,16 @@ public enum TimelineReducer {
         case .systemInit, .system, .controlResponse:
             break  // ChatSession consumes these; nothing renders inline.
         case .controlRequest(let request):
-            if let permission = PermissionRequest(request) {
+            if let permission = PermissionRequest(request),
+               !permission.requiresUserInteraction {
                 items.append(.permission(id: permission.requestID,
                                          request: permission, resolution: nil))
             }
-            // Non-permission control requests (hook_callback, mcp_message)
-            // are plumbing, not conversation — Plan 4 decides their UI.
+            // Interactive gates (AskUserQuestion, ExitPlanMode) render as
+            // composer-slot cards via ChatSession.pendingGates; their
+            // tool_use card + tool_result already narrate the outcome here.
+            // Other control requests (hook_callback, mcp_message) stay
+            // plumbing, not conversation.
         case .result(let turn):
             finalizeDanglingStreamText(&items)
             items.append(.turnSummary(
@@ -93,7 +99,6 @@ public enum TimelineReducer {
     // MARK: - Streaming deltas
 
     private static func reduceStream(_ items: inout [TimelineItem], _ stream: StreamEvent) {
-        guard stream.parentToolUseID == nil else { return }  // subagent traffic: Plan 4
         switch stream.kind {
         case .contentBlockStart(_, .toolUse(let id, let name, let input)):
             upsertToolCall(&items, id: id, name: name, input: input)
@@ -115,7 +120,6 @@ public enum TimelineReducer {
     // MARK: - Final assistant messages
 
     private static func reduceAssistant(_ items: inout [TimelineItem], _ message: AssistantMessage) {
-        guard message.parentToolUseID == nil else { return }
         let baseID = message.raw["uuid"]?.stringValue ?? "assistant-\(items.count)"
         var textIndex = 0
         for block in message.content {
