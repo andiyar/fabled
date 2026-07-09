@@ -10,7 +10,8 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        @Bindable var app = app
+        return NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280)
         } detail: {
@@ -21,6 +22,12 @@ struct RootView: View {
             NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
         }
         .task { await app.bootstrap() }
+        .fileImporter(isPresented: $app.isPickingFolder,
+                      allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result {
+                Task { await app.newSession(at: url) }
+            }
+        }
         .alert("Session failed", isPresented: Binding(
             get: { app.launchError != nil },
             set: { if !$0 { app.clearLaunchError() } }
@@ -37,7 +44,7 @@ struct RootView: View {
             if let session = app.liveSessions.first(where: { $0.id == id }) {
                 ConversationView(session: session)
             } else {
-                WelcomeView(newSession: startScratchSession)
+                WelcomeView { app.isPickingFolder = true }
             }
         case .historical(let id):
             if let summary = app.summary(forSessionID: id) {
@@ -46,16 +53,7 @@ struct RootView: View {
                 Text("Not found")
             }
         case nil:
-            WelcomeView(newSession: startScratchSession)
+            WelcomeView { app.isPickingFolder = true }
         }
-    }
-
-    /// TEMPORARY (Task 12 replaces with a folder picker): scratch dir session.
-    private func startScratchSession() {
-        let scratch = FileManager.default.temporaryDirectory
-            .appendingPathComponent("fabled-scratch")
-        try? FileManager.default.createDirectory(
-            at: scratch, withIntermediateDirectories: true)
-        Task { await app.newSession(at: scratch) }
     }
 }

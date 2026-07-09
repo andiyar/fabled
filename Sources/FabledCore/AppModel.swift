@@ -16,6 +16,9 @@ public final class AppModel {
     public private(set) var isIndexing = false
     public private(set) var launchError: String?
     public var selection: Selection?
+    /// The New Session folder picker (menu ⌘N, welcome button) presents
+    /// when this flips true; RootView owns the fileImporter.
+    public var isPickingFolder = false
     public var searchQuery = "" {
         didSet { if searchQuery != oldValue { scheduleSearch() } }
     }

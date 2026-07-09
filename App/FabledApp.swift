@@ -24,5 +24,11 @@ struct FabledApp: App {
             RootView()
                 .environment(model)
         }
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Session…") { model.isPickingFolder = true }
+                    .keyboardShortcut("n", modifiers: .command)
+            }
+        }
     }
 }
