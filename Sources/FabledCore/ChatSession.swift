@@ -26,6 +26,8 @@ public final class ChatSession: Identifiable {
     public private(set) var cumulativeCostUSD = 0.0
     public private(set) var lastUsage: JSONValue?
     public private(set) var hasEnded = false
+    /// Yellow banner at the top of ConversationView. Doubles as a
+    /// startup-failure banner: set when the child dies before `system init`.
     public private(set) var versionNote: String?
 
     private let connection: AgentConnection
@@ -42,6 +44,13 @@ public final class ChatSession: Identifiable {
 
     /// Production path: spawn the CLI and bind a session to it.
     public static func launch(configuration: SessionConfiguration) async throws -> ChatSession {
+        var configuration = configuration
+        // GUI launches inherit a minimal PATH from LaunchServices, so the
+        // `/usr/bin/env claude` fallback exits 127. Resolve the binary from the
+        // standard install locations before spawning; nil leaves env in place.
+        if configuration.executable == nil {
+            configuration.executable = SessionConfiguration.resolveClaudeExecutable()
+        }
         let agent = AgentSession(configuration: configuration)
         try await agent.start()
         let session = ChatSession(
@@ -176,10 +185,19 @@ public final class ChatSession: Identifiable {
             case .textDelta, .contentBlockStart: isThinking = false
             default: break
             }
-        case .terminated:
+        case .terminated(let exitCode):
             hasEnded = true
             isWorking = false
             isThinking = false
+            // Dead before `system init` ever arrived — almost always a missing
+            // or unresolvable CLI. Surface it loudly instead of a silent dead
+            // session in the sidebar.
+            if info == nil {
+                versionNote = "claude exited immediately (code \(exitCode)) before "
+                    + "initializing — is the Claude Code CLI installed and executable? "
+                    + "Fabled looks in PATH, ~/.local/bin, ~/.claude/local, "
+                    + "/opt/homebrew/bin, /usr/local/bin."
+            }
         default:
             break
         }

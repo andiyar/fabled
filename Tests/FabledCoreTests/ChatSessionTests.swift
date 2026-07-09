@@ -124,6 +124,18 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertFalse(session.isWorking)
     }
 
+    func testTerminatedBeforeInitSurfacesLoudBanner() async throws {
+        let (session, continuation, _) = makeSession()
+        // Child dies with 127 (env exit) before any `system init` arrived.
+        continuation.yield(.terminated(exitCode: 127))
+        continuation.finish()
+        await waitUntil("ended") { session.hasEnded }
+        XCTAssertNil(session.info)
+        XCTAssertNotNil(session.versionNote, "dead-at-launch must not be silent")
+        XCTAssertTrue(session.versionNote?.contains("127") ?? false,
+                      "banner names the exit code: \(session.versionNote ?? "nil")")
+    }
+
     func testSeedTimeline() {
         let (session, _, _) = makeSession()
         session.seed(timeline: [.userMessage(id: "m1", text: "old prompt")])

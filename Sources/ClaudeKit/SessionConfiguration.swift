@@ -17,6 +17,32 @@ public struct SessionConfiguration: Sendable {
         self.workingDirectory = workingDirectory
     }
 
+    /// Locates the `claude` binary for GUI contexts where PATH is minimal.
+    /// LaunchServices hands an app only `/usr/bin:/bin:/usr/sbin:/sbin`, so
+    /// `/usr/bin/env claude` (the `executable == nil` fallback) exits 127.
+    /// Checks PATH first (Terminal-launched processes carry a full one), then
+    /// the standard install locations. Returns nil if none are executable,
+    /// leaving the env fallback in place.
+    public static func resolveClaudeExecutable(
+        environmentPATH: String? = ProcessInfo.processInfo.environment["PATH"],
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL? {
+        var candidates: [URL] = []
+        for dir in (environmentPATH ?? "").split(separator: ":") {
+            candidates.append(
+                URL(fileURLWithPath: String(dir)).appendingPathComponent("claude"))
+        }
+        candidates += [
+            home.appendingPathComponent(".local/bin/claude"),
+            home.appendingPathComponent(".claude/local/claude"),
+            URL(fileURLWithPath: "/opt/homebrew/bin/claude"),
+            URL(fileURLWithPath: "/usr/local/bin/claude"),
+        ]
+        return candidates.first {
+            FileManager.default.isExecutableFile(atPath: $0.path)
+        }
+    }
+
     public func arguments() -> [String] {
         var args = [
             "-p", "--verbose",
