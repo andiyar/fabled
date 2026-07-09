@@ -16,15 +16,11 @@ struct ComposerView: View {
                     }
                     .id(request.requestID)
                 case .question(let prompt):
-                    // Placeholder until Task 8's QuestionCardView.
-                    HStack {
-                        Text(prompt.questions.first?.text ?? "Claude has a question")
-                            .font(.callout)
-                        Spacer()
-                        Button("Skip") { session.skipQuestions(prompt) }
-                    }
-                    .padding(10)
-                    .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
+                    QuestionCardView(
+                        prompt: prompt,
+                        respond: { session.answer(prompt, answers: $0) },
+                        skip: { session.skipQuestions(prompt) })
+                    .id(prompt.request.requestID)
                 case .planApproval(let approval):
                     // Placeholder until Task 9's PlanApprovalViews.
                     HStack {
