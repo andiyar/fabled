@@ -33,7 +33,8 @@ enum CoreFixtures {
 actor OutboundRecorder {
     enum Entry: Equatable {
         case send(String)
-        case respond(requestID: String, behavior: String)
+        case respond(requestID: String, behavior: String, updatedInput: JSONValue?,
+                     message: String?)
         case interrupt
         case setModel(String)
         case setPermissionMode(String)
@@ -51,8 +52,16 @@ func makeFakeConnection()
         events: { stream },
         send: { await recorder.record(.send($0)) },
         respond: { request, decision in
-            let behavior = if case .allow = decision { "allow" } else { "deny" }
-            await recorder.record(.respond(requestID: request.requestID, behavior: behavior))
+            switch decision {
+            case .allow(let updatedInput, _):
+                await recorder.record(.respond(
+                    requestID: request.requestID, behavior: "allow",
+                    updatedInput: updatedInput, message: nil))
+            case .deny(let message):
+                await recorder.record(.respond(
+                    requestID: request.requestID, behavior: "deny",
+                    updatedInput: nil, message: message))
+            }
         },
         interrupt: { await recorder.record(.interrupt) },
         setModel: { await recorder.record(.setModel($0)) },

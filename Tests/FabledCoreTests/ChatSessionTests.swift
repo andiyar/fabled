@@ -151,14 +151,17 @@ final class ChatSessionTests: XCTestCase {
         try yield(continuation, #"""
         {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git init"},"permission_suggestions":[]}}
         """#)
-        await waitUntil("pending permission") { session.pendingPermission != nil }
+        await waitUntil("pending permission") { session.pendingGate != nil }
         XCTAssertEqual(session.activityState, .needsApproval)
-        let request = session.pendingPermission!
+        guard case .permission(let request)? = session.pendingGate else {
+            return XCTFail("expected permission gate, got \(String(describing: session.pendingGate))")
+        }
 
         session.respond(to: request, decision: .allowAsRequested)
-        XCTAssertNil(session.pendingPermission)
+        XCTAssertNil(session.pendingGate)
         let entries = await waitForEntries(recorder, count: 1)
-        XCTAssertEqual(entries, [.respond(requestID: "p1", behavior: "allow")])
+        XCTAssertEqual(entries, [.respond(requestID: "p1", behavior: "allow",
+                                          updatedInput: nil, message: nil)])
         let permissionItem = session.timeline.first {
             if case .permission = $0 { return true } else { return false }
         }
@@ -173,13 +176,13 @@ final class ChatSessionTests: XCTestCase {
         try yield(continuation, #"""
         {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git init"},"permission_suggestions":[]}}
         """#)
-        await waitUntil("pending permission") { session.pendingPermission != nil }
+        await waitUntil("pending permission") { session.pendingGate != nil }
         XCTAssertEqual(session.activityState, .needsApproval)
 
         // interrupt → error_during_execution abandons the open gate: the CLI
         // is no longer waiting for a decision (fixtures/2026-07-09-interrupt.jsonl).
         try yield(continuation, #"{"type":"result","subtype":"error_during_execution","is_error":true,"uuid":"r1"}"#)
-        await waitUntil("gate cleared") { session.pendingPermission == nil }
+        await waitUntil("gate cleared") { session.pendingGate == nil }
         XCTAssertEqual(session.activityState, .idle)
         let permissionItem = session.timeline.first {
             if case .permission = $0 { return true } else { return false }
@@ -225,5 +228,119 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertEqual(session.title, "demo", "falls back to the folder name")
         session.send("Fix the login bug\nplease")
         XCTAssertEqual(session.title, "Fix the login bug")
+    }
+
+    private func yieldEvent(_ continuation: AsyncStream<AgentEvent>.Continuation,
+                            _ json: String) throws {
+        continuation.yield(try AgentEventDecoder.decode(Data(json.utf8)))
+    }
+
+    func testQuestionGateAnswerRoundTrip() async throws {
+        let (connection, continuation, recorder) = makeFakeConnection()
+        let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
+        session.begin()
+        try yieldEvent(continuation,
+            #"{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Color?","header":"C","options":[{"label":"Red","description":""},{"label":"Blue","description":""}],"multiSelect":false}]},"requires_user_interaction":true,"tool_use_id":"t9"}}"#)
+        await waitUntil("question gate") { session.pendingGates.count == 1 }
+        guard case .question(let prompt)? = session.pendingGate else {
+            return XCTFail("expected question gate, got \(String(describing: session.pendingGate))")
+        }
+        XCTAssertEqual(session.activityState, .needsApproval)
+
+        session.answer(prompt, answers: ["Color?": "Blue"])
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .respond("q1", "allow", let updated, nil) = entries[0] else {
+            return XCTFail("got \(entries)")
+        }
+        XCTAssertEqual(updated?["answers"]?["Color?"]?.stringValue, "Blue")
+        XCTAssertTrue(session.pendingGates.isEmpty)
+        XCTAssertTrue(session.timeline.isEmpty, "no permission row for gates")
+    }
+
+    func testSkipSendsEchoWithoutAnswers() async throws {
+        let (connection, continuation, recorder) = makeFakeConnection()
+        let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
+        session.begin()
+        try yieldEvent(continuation,
+            #"{"type":"control_request","request_id":"q2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Color?","header":"C","options":[{"label":"Red","description":""}],"multiSelect":false}]},"requires_user_interaction":true}}"#)
+        await waitUntil("gate") { session.pendingGate != nil }
+        guard case .question(let prompt)? = session.pendingGate else { return XCTFail() }
+        session.skipQuestions(prompt)
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .respond("q2", "allow", let updated, nil) = entries[0] else {
+            return XCTFail("got \(entries)")
+        }
+        XCTAssertNil(updated?["answers"], "skip = echo, no answers key (probe finding 3)")
+    }
+
+    func testPlanApprovalAndStatusModeSwitch() async throws {
+        let (connection, continuation, recorder) = makeFakeConnection()
+        let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"),
+                                  permissionMode: "plan")
+        session.begin()
+        try yieldEvent(continuation,
+            ##"{"type":"control_request","request_id":"e1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# The Plan"},"requires_user_interaction":true}}"##)
+        await waitUntil("plan gate") { session.pendingGate != nil }
+        guard case .planApproval(let approval)? = session.pendingGate else { return XCTFail() }
+        XCTAssertEqual(approval.plan, "# The Plan")
+
+        session.approvePlan(approval)
+        _ = await waitForEntries(recorder, count: 1)
+        XCTAssertEqual(session.permissionMode, "plan", "mode changes only on the CLI's status event")
+
+        try yieldEvent(continuation,
+            #"{"type":"system","subtype":"status","status":null,"permissionMode":"default","uuid":"s1"}"#)
+        await waitUntil("mode switch") { session.permissionMode == "default" }
+    }
+
+    func testPlanRejectionPhrasing() async throws {
+        let (connection, continuation, recorder) = makeFakeConnection()
+        let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
+        session.begin()
+        try yieldEvent(continuation,
+            ##"{"type":"control_request","request_id":"e2","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# P"},"requires_user_interaction":true}}"##)
+        await waitUntil("gate") { session.pendingGate != nil }
+        guard case .planApproval(let approval)? = session.pendingGate else { return XCTFail() }
+        session.rejectPlan(approval, feedback: "needs a licence section")
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .respond("e2", "deny", nil, let message) = entries[0] else {
+            return XCTFail("got \(entries)")
+        }
+        XCTAssertEqual(message,
+            "The user rejected the plan with this feedback: needs a licence section")
+    }
+
+    func testTodosTrackLatestList() async throws {
+        let (connection, continuation, _) = makeFakeConnection()
+        let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
+        session.begin()
+        try yieldEvent(continuation,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"td1","name":"TodoWrite","input":{"todos":[{"content":"a","status":"in_progress","activeForm":"a"},{"content":"b","status":"pending","activeForm":"b"}]}}]},"uuid":"a1"}"#)
+        await waitUntil("todos") { session.todos.count == 2 }
+        try yieldEvent(continuation,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"td2","name":"TodoWrite","input":{"todos":[{"content":"a","status":"completed","activeForm":"a"},{"content":"b","status":"completed","activeForm":"b"}]}}]},"uuid":"a2"}"#)
+        await waitUntil("todos update") { session.todos.allSatisfy { $0.status == .completed } }
+    }
+
+    func testSubagentEventsRouteToSubTimeline() async throws {
+        let (connection, continuation, _) = makeFakeConnection()
+        let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
+        session.begin()
+        // Parent Task call in the main timeline…
+        try yieldEvent(continuation,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"task-1","name":"Task","input":{"description":"explore"}}]},"uuid":"a1"}"#)
+        // …then parented traffic.
+        try yieldEvent(continuation,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"sub-t1","name":"Bash","input":{"command":"ls"}}]},"parent_tool_use_id":"task-1","uuid":"a2"}"#)
+        try yieldEvent(continuation,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"sub-t1","content":"ok","is_error":false}]},"parent_tool_use_id":"task-1","uuid":"u1"}"#)
+        await waitUntil("routing") { session.subagentTimelines["task-1"]?.count == 1 }
+        XCTAssertEqual(session.timeline.count, 1, "main timeline holds only the Task card")
+        guard case .toolCall("sub-t1", "Bash", _, _, .string("ok"), false, false) =
+            session.subagentTimelines["task-1"]![0] else {
+            return XCTFail("sub-timeline should reduce normally: \(session.subagentTimelines)")
+        }
+        XCTAssertFalse(session.isThinking,
+                       "subagent stream state must not drive the parent spinner")
     }
 }

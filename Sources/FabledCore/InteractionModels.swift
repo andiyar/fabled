@@ -91,3 +91,20 @@ public struct TodoItem: Equatable, Sendable, Identifiable {
         }
     }
 }
+
+/// One thing the CLI is waiting on the user for. Rendered in the composer
+/// slot; arrival order preserved (first gate is the active card).
+public enum InteractionGate: Equatable, Sendable, Identifiable {
+    case permission(PermissionRequest)
+    case question(QuestionPrompt)
+    case planApproval(PlanApproval)
+
+    public var requestID: String {
+        switch self {
+        case .permission(let request): request.requestID
+        case .question(let prompt): prompt.request.requestID
+        case .planApproval(let approval): approval.request.requestID
+        }
+    }
+    public var id: String { requestID }
+}

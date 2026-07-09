@@ -15,8 +15,8 @@ public final class ChatSession: Identifiable {
     public let workingDirectory: URL
 
     public private(set) var timeline: [TimelineItem] = []
-    public private(set) var pendingPermissions: [PermissionRequest] = []
-    public var pendingPermission: PermissionRequest? { pendingPermissions.first }
+    public private(set) var pendingGates: [InteractionGate] = []
+    public var pendingGate: InteractionGate? { pendingGates.first }
     public private(set) var isWorking = false
     public private(set) var isThinking = false
     public private(set) var info: SystemInit?
@@ -31,6 +31,11 @@ public final class ChatSession: Identifiable {
     /// startup-failure banner: set when the child dies before the
     /// initialize handshake was ever acknowledged.
     public private(set) var versionNote: String?
+    /// Latest TodoWrite list — the CLI re-sends the whole list per call.
+    public private(set) var todos: [TodoItem] = []
+    /// Subagent traffic grouped by the spawning Task's tool_use id,
+    /// reduced through the same TimelineReducer vocabulary.
+    public private(set) var subagentTimelines: [String: [TimelineItem]] = [:]
     /// The CLI acknowledged the initialize handshake (catalog
     /// control_response) or sent `system init` — the child is alive and
     /// talking, even though 2.1.205+ holds init until the first user turn.
@@ -135,12 +140,48 @@ public final class ChatSession: Identifiable {
     public func respond(to request: PermissionRequest, decision: PermissionDecision) {
         // A double-click (or a gate already abandoned by an aborted turn) must
         // not forward a duplicate control_response to the CLI.
-        guard pendingPermissions.contains(where: { $0.requestID == request.requestID })
-        else { return }
-        pendingPermissions.removeAll { $0.requestID == request.requestID }
+        guard removeGate(requestID: request.requestID) else { return }
         timeline = TimelineReducer.resolvePermission(
             timeline, requestID: request.requestID, decision: decision)
         Task { await connection.respond(request, decision) }
+    }
+
+    /// AskUserQuestion: answers keyed by exact question text, multi-select
+    /// values ", "-joined by the caller (probe finding 2).
+    public func answer(_ prompt: QuestionPrompt, answers: [String: String]) {
+        guard removeGate(requestID: prompt.request.requestID) else { return }
+        Task {
+            await connection.respond(prompt.request, .allow(
+                updatedInput: prompt.answeredInput(answers), updatedPermissions: nil))
+        }
+    }
+
+    /// Skip = allow with the input echoed unchanged (probe finding 3).
+    public func skipQuestions(_ prompt: QuestionPrompt) {
+        answer(prompt, answers: [:])
+    }
+
+    public func approvePlan(_ approval: PlanApproval) {
+        guard removeGate(requestID: approval.request.requestID) else { return }
+        Task { await connection.respond(approval.request, .allowAsRequested) }
+    }
+
+    /// Deny phrased as user feedback — a bare imperative reads as prompt
+    /// injection to the model (probe finding 6).
+    public func rejectPlan(_ approval: PlanApproval, feedback: String?) {
+        guard removeGate(requestID: approval.request.requestID) else { return }
+        let trimmed = feedback?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let message = trimmed.isEmpty
+            ? "The user rejected the plan. Revise it and request approval again."
+            : "The user rejected the plan with this feedback: \(trimmed)"
+        Task { await connection.respond(approval.request, .deny(message: message)) }
+    }
+
+    private func removeGate(requestID: String) -> Bool {
+        guard let index = pendingGates.firstIndex(where: { $0.requestID == requestID })
+        else { return false }
+        pendingGates.remove(at: index)
+        return true
     }
 
     public func interrupt() {
@@ -172,7 +213,7 @@ public final class ChatSession: Identifiable {
     /// Sidebar dot: approval beats working beats idle.
     public var activityState: ActivityState {
         if hasEnded { return .ended }
-        if !pendingPermissions.isEmpty { return .needsApproval }
+        if !pendingGates.isEmpty { return .needsApproval }
         if isWorking { return .working }
         return .idle
     }
@@ -200,6 +241,14 @@ public final class ChatSession: Identifiable {
     private func handle(_ event: AgentEvent) {
         let tag = Mirror(reflecting: event).children.first?.label ?? "terminated"
         Self.wireLog.debug("event \(tag, privacy: .public) [\(self.id, privacy: .public)]")
+        // Subagent side-streams: same vocabulary, separate timeline. Routed
+        // here (not in the reducer) so sub-traffic can't touch parent state
+        // like isThinking or gates.
+        if let parentID = event.parentToolUseID {
+            subagentTimelines[parentID] = TimelineReducer.reduce(
+                subagentTimelines[parentID] ?? [], event)
+            return
+        }
         switch event {
         case .systemInit(let info):
             self.info = info
@@ -218,7 +267,13 @@ public final class ChatSession: Identifiable {
             harvestCatalog(envelope.payload)
         case .controlRequest(let request):
             if let permission = PermissionRequest(request) {
-                pendingPermissions.append(permission)
+                if let question = QuestionPrompt(permission) {
+                    pendingGates.append(.question(question))
+                } else if let approval = PlanApproval(permission) {
+                    pendingGates.append(.planApproval(approval))
+                } else {
+                    pendingGates.append(.permission(permission))
+                }
             }
         case .result(let turn):
             turnsInFlight = max(0, turnsInFlight - 1)
@@ -227,7 +282,7 @@ public final class ChatSession: Identifiable {
             // An aborted turn (interrupt → error_during_execution) abandons any
             // open permission gate — the CLI is no longer waiting for a decision.
             // On normal completion the list is already empty, so this is a no-op.
-            pendingPermissions.removeAll()
+            pendingGates.removeAll()
             cumulativeCostUSD += turn.totalCostUSD ?? 0
             lastUsage = turn.usage
         case .streamEvent(let stream):
@@ -250,6 +305,21 @@ public final class ChatSession: Identifiable {
                     + "initializing — is the Claude Code CLI installed and executable? "
                     + "Fabled looks in PATH, ~/.local/bin, ~/.claude/local, "
                     + "/opt/homebrew/bin, /usr/local/bin."
+            }
+        case .system(let subtype, let raw):
+            // Plan approval (and future mode changes) announce the new mode
+            // via system/status (probe finding 5). set_permission_mode acks
+            // stay optimistic — 4c adds correlation.
+            if subtype == "status",
+               let mode = raw["permissionMode"]?.stringValue, !mode.isEmpty {
+                permissionMode = mode
+            }
+        case .assistant(let message):
+            for block in message.content {
+                if case .toolUse(_, "TodoWrite", let input) = block {
+                    let parsed = TodoItem.list(from: input)
+                    if !parsed.isEmpty { todos = parsed }
+                }
             }
         default:
             break

@@ -6,7 +6,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
 
     private var pendingApprovals: Int {
-        app.liveSessions.reduce(0) { $0 + $1.pendingPermissions.count }
+        app.liveSessions.reduce(0) { $0 + $1.pendingGates.count }
     }
 
     var body: some View {

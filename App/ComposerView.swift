@@ -8,11 +8,35 @@ struct ComposerView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            if let permission = session.pendingPermission {
-                PermissionCardView(request: permission) { decision in
-                    session.respond(to: permission, decision: decision)
+            if let gate = session.pendingGate {
+                switch gate {
+                case .permission(let request):
+                    PermissionCardView(request: request) { decision in
+                        session.respond(to: request, decision: decision)
+                    }
+                    .id(request.requestID)
+                case .question(let prompt):
+                    // Placeholder until Task 8's QuestionCardView.
+                    HStack {
+                        Text(prompt.questions.first?.text ?? "Claude has a question")
+                            .font(.callout)
+                        Spacer()
+                        Button("Skip") { session.skipQuestions(prompt) }
+                    }
+                    .padding(10)
+                    .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
+                case .planApproval(let approval):
+                    // Placeholder until Task 9's PlanApprovalViews.
+                    HStack {
+                        Text("Claude proposes a plan").font(.callout)
+                        Spacer()
+                        Button("Reject") { session.rejectPlan(approval, feedback: nil) }
+                        Button("Approve") { session.approvePlan(approval) }
+                            .buttonStyle(.borderedProminent).tint(Theme.clay)
+                    }
+                    .padding(10)
+                    .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
                 }
-                .id(permission.requestID)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Message Claude…", text: $draft, axis: .vertical)
@@ -37,7 +61,7 @@ struct ComposerView: View {
                 .buttonStyle(.plain)
                 .disabled(!canSend)
                 // ⌘⏎ belongs to the permission card while one is pending.
-                .keyboardShortcut(session.pendingPermission == nil
+                .keyboardShortcut(session.pendingGate == nil
                     ? KeyboardShortcut(.return, modifiers: .command) : nil)
             }
         }
