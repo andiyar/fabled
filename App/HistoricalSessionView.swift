@@ -15,16 +15,9 @@ struct HistoricalSessionView: View {
     }
 
     /// One action for the transcript rows and the inspector's sub-rows.
-    /// Injected DIRECTLY onto the concrete ScrollView (below) rather than on the
-    /// root: this view's root is a `Group` whose real content lives behind an
-    /// `if let items` branch, and a custom `.environment` applied above that
-    /// branch boundary (alongside `.inspector`/`.toolbar`/`.task` in a
-    /// NavigationSplitView detail column) was not being re-delivered to the
-    /// loaded branch when it materialized — so the rows read a nil action and
-    /// clicks no-op'd, even though the Button (and its `.help` tooltip) rendered
-    /// fine. The live ConversationView never hit this because its root is an
-    /// always-present concrete `VStack` (no branch flip). Applying the action on
-    /// the concrete rows container removes the branch/presentation subtlety.
+    /// Injected directly onto the concrete rows ScrollView (main timeline) and
+    /// handed explicitly to InspectorPanel (drill-down) — never relied on via
+    /// inheritance across the `.inspector` presentation boundary.
     private var inspectAction: InspectItemAction {
         InspectItemAction { id in
             inspectedID = id
@@ -33,7 +26,23 @@ struct HistoricalSessionView: View {
     }
 
     var body: some View {
-        Group {
+        // The presentation/structural modifiers below (.inspector, .toolbar,
+        // .navigationTitle, .task) MUST attach to this always-present concrete
+        // VStack — the exact shape ConversationView uses, which is the only
+        // configuration we have observed the inspector actually present in.
+        //
+        // WHY this matters: this view previously rooted on `Group { if let items
+        // { rows } else { ProgressView } }` with the modifiers on the Group. A
+        // Group forwards its modifiers to its child, and here the child is a
+        // conditional whose identity SWAPS (ProgressView → ScrollView) when
+        // `.task` finishes loading. `.inspector(isPresented:)` bound to that
+        // swapping conditional never established a presentation host, so row
+        // clicks set `isInspectorPresented = true` but no panel ever appeared
+        // (and the ⌥⌘I toggle, added below, would have failed the same way).
+        // Hosting the modifiers on a stable concrete root, with the loading/
+        // loaded conditional nested INSIDE, removes that swap from the
+        // presentation path entirely.
+        VStack(spacing: 0) {
             if let items {
                 // Match ConversationView: short transcripts lay out from the top
                 // (minHeight fills the viewport), long ones follow the bottom.
@@ -50,8 +59,8 @@ struct HistoricalSessionView: View {
                         .frame(minHeight: geo.size.height, alignment: .top)
                     }
                     .defaultScrollAnchor(.bottom)
-                    // See `inspectAction`: injected on the concrete rows
-                    // container, below the `if let` branch boundary.
+                    // Injected on the concrete rows container so
+                    // ToolCallCard/RawEventView always resolve the action.
                     .environment(\.inspectItem, inspectAction)
                 }
             } else {
@@ -72,6 +81,15 @@ struct HistoricalSessionView: View {
         }
         .toolbar {
             ToolbarItemGroup {
+                // Independent presentation-path affordance (matches
+                // ConversationView) — verifiable without clicking a row.
+                Button {
+                    isInspectorPresented.toggle()
+                } label: {
+                    Image(systemName: "sidebar.right")
+                }
+                .help("Toggle inspector")
+                .keyboardShortcut("i", modifiers: [.command, .option])
                 Button("Resume") { Task { await app.resume(summary, fork: false) } }
                 Button("Fork") { Task { await app.resume(summary, fork: true) } }
             }
