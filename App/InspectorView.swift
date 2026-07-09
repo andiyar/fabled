@@ -15,14 +15,19 @@ extension EnvironmentValues {
 
 /// Right-hand detail panel: full tool I/O, diffs (Task 7), subagent
 /// drill-down (Task 11), raw events. The transcript shows one-liners;
-/// everything deep lives here (Electron-parity gate feedback).
+/// everything deep lives here (Electron-parity gate feedback). The
+/// container resolves the inspected item and passes only that item plus
+/// its subagent slice — handing the panel whole timelines makes SwiftUI
+/// deep-compare every accumulated payload per stream event (T6 quality
+/// review).
 struct InspectorPanel: View {
-    let items: [TimelineItem]
-    let subagentTimelines: [String: [TimelineItem]]
+    let item: TimelineItem?
+    /// Sub-timeline of the inspected Task/Agent call, if any (Task 11).
+    let subagentItems: [TimelineItem]?
     @Binding var inspectedID: String?
 
     var body: some View {
-        if let item = resolvedItem {
+        if let item {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -50,15 +55,6 @@ struct InspectorPanel: View {
                 systemImage: "sidebar.right",
                 description: Text("Click a tool card to see its full detail."))
         }
-    }
-
-    private var resolvedItem: TimelineItem? {
-        guard let inspectedID else { return nil }
-        if let item = items.first(where: { $0.id == inspectedID }) { return item }
-        for timeline in subagentTimelines.values {
-            if let item = timeline.first(where: { $0.id == inspectedID }) { return item }
-        }
-        return nil
     }
 
     @ViewBuilder

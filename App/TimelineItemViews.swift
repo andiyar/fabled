@@ -173,6 +173,7 @@ struct RawEventView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("Show raw event in the inspector")
         .padding(6)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
     }

@@ -9,6 +9,11 @@ struct HistoricalSessionView: View {
     @State private var inspectedID: String?
     @State private var isInspectorPresented = false
 
+    private var inspectedItem: TimelineItem? {
+        guard let inspectedID else { return nil }
+        return (items ?? []).first(where: { $0.id == inspectedID })
+    }
+
     var body: some View {
         Group {
             if let items {
@@ -40,8 +45,8 @@ struct HistoricalSessionView: View {
             isInspectorPresented = true
         })
         .inspector(isPresented: $isInspectorPresented) {
-            InspectorPanel(items: items ?? [],
-                           subagentTimelines: [:],
+            InspectorPanel(item: inspectedItem,
+                           subagentItems: nil,
                            inspectedID: $inspectedID)
                 .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
         }

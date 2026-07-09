@@ -6,6 +6,17 @@ struct ConversationView: View {
     @State private var inspectedID: String?
     @State private var isInspectorPresented = false
 
+    /// Resolves the inspected id against the main timeline and all subagent
+    /// sub-timelines (sub rows are inspectable too — Task 11).
+    private var inspectedItem: TimelineItem? {
+        guard let inspectedID else { return nil }
+        if let item = session.timeline.first(where: { $0.id == inspectedID }) { return item }
+        for timeline in session.subagentTimelines.values {
+            if let item = timeline.first(where: { $0.id == inspectedID }) { return item }
+        }
+        return nil
+    }
+
     /// Always-visible active model: catalog display name when known,
     /// else the raw id the session reported.
     private var activeModelLabel: String {
@@ -80,8 +91,8 @@ struct ConversationView: View {
             isInspectorPresented = true
         })
         .inspector(isPresented: $isInspectorPresented) {
-            InspectorPanel(items: session.timeline,
-                           subagentTimelines: session.subagentTimelines,
+            InspectorPanel(item: inspectedItem,
+                           subagentItems: inspectedID.flatMap { session.subagentTimelines[$0] },
                            inspectedID: $inspectedID)
                 .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
         }
