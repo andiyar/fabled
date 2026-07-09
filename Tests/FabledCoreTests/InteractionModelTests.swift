@@ -44,6 +44,16 @@ final class InteractionModelTests: XCTestCase {
         XCTAssertEqual(updated["answers"]?["Which sizes do you want?"]?.stringValue, "Small, Large")
     }
 
+    /// Skip is a distinct wire behavior (probe finding 3): an empty answer
+    /// record must omit the `answers` key entirely, not send an empty object.
+    func testAnsweredInputSkipOmitsAnswers() throws {
+        let request = try permissionRequest(fixture: "2026-07-09-askuserquestion-answer.jsonl")
+        let prompt = try XCTUnwrap(QuestionPrompt(request))
+        let skipped = prompt.answeredInput([:])
+        XCTAssertNil(skipped["answers"])
+        XCTAssertEqual(skipped["questions"], request.input["questions"])
+    }
+
     func testPlanApprovalParsesFixture() throws {
         let events = try CoreFixtures.events("2026-07-09-exitplanmode-approve.jsonl")
         let approval = events.compactMap { event -> PlanApproval? in
