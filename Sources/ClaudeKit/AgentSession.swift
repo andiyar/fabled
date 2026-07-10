@@ -99,18 +99,18 @@ public actor AgentSession {
         }
 
         readTask = Task { [weak self] in
-            var buffer = Data()
+            var lineBuffer = LineBuffer()
             for await chunk in chunks {
                 guard let self else { return }
-                buffer.append(chunk)
-                while let newline = buffer.firstIndex(of: 0x0A) {
-                    let lineData = buffer.prefix(upTo: newline)
-                    buffer.removeSubrange(...newline)
-                    guard !lineData.isEmpty else { continue }
-                    if let event = try? AgentEventDecoder.decode(lineData) {
+                for line in lineBuffer.append(chunk) {
+                    if let event = try? AgentEventDecoder.decode(line) {
                         await self.emit(event)
                     }
                 }
+            }
+            if let tail = lineBuffer.finish(),
+               let event = try? AgentEventDecoder.decode(tail) {
+                await self?.emit(event)
             }
             // Pipe closed — termination handler emits .terminated.
         }
