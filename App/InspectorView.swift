@@ -45,12 +45,25 @@ struct InspectorPanel: View {
     /// panel to a sub item (T12 gate). Do not rely on inheritance for this.
     let inspectItem: InspectItemAction?
     @Binding var inspectedID: String?
+    /// Pops the drill-down trail (Task detail → sub-row → back). nil hides the
+    /// button — historical sessions have no drill-down, so no trail.
+    var onBack: (() -> Void)? = nil
 
     var body: some View {
         if let item {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
+                        if let onBack {
+                            Button(action: onBack) {
+                                Label("Back", systemImage: "chevron.left")
+                                    .labelStyle(.titleAndIcon)
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help("Back to the previous item")
+                        }
                         Spacer()
                         // In-panel close (deliberately not a toolbar item —
                         // toolbar placement inside .inspector content is

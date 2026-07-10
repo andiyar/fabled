@@ -5,6 +5,11 @@ struct ConversationView: View {
     let session: ChatSession
     @State private var inspectedID: String?
     @State private var isInspectorPresented = false
+    /// Trail of previously inspected ids: drilling from a Task's detail into a
+    /// subagent sub-row pushes the Task here, and the panel's Back button pops
+    /// it — without this the only way back up is re-clicking the transcript
+    /// row (Ben, 2026-07-10 live smoke).
+    @State private var inspectBackStack: [String] = []
 
     /// Resolves the inspected id against the main timeline and all subagent
     /// sub-timelines (sub rows are inspectable too — Task 11).
@@ -25,6 +30,9 @@ struct ConversationView: View {
         // Stable id → Equatable environment value that does not churn per render
         // (see InspectItemAction / the row-activation note in TimelineItemViews).
         InspectItemAction(id: "conversation-\(session.id)") { id in
+            if let current = inspectedID, current != id {
+                inspectBackStack.append(current)
+            }
             inspectedID = id
             isInspectorPresented = true
         }
@@ -120,8 +128,16 @@ struct ConversationView: View {
             InspectorPanel(item: inspectedItem,
                            subagentItems: inspectedID.flatMap { session.subagentTimelines[$0] },
                            inspectItem: inspectAction,
-                           inspectedID: $inspectedID)
+                           inspectedID: $inspectedID,
+                           onBack: inspectBackStack.isEmpty ? nil : {
+                               inspectedID = inspectBackStack.popLast()
+                           })
                 .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
+        }
+        // Dismissing the panel (✕ or ⌥⌘I) ends the drill-down trail; a fresh
+        // inspection starts from a clean stack.
+        .onChange(of: inspectedID) { _, new in
+            if new == nil { inspectBackStack.removeAll() }
         }
         .toolbar {
             ToolbarItemGroup {

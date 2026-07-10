@@ -97,3 +97,5 @@ Deferred:
 - **mmap truncation edge (note).** `.mappedIfSafe` + a writer truncating/replacing a mapped session file ⇒ SIGBUS. Safe today (CLI appends only); revisit if any tooling rewrites session files.
 - **`ftsQuery` wrap-only quoting (note).** A token with an interior `"` can't match a literal quote (degrades to no-results via the narrow catch). Accepted; plan doc's "quotes are doubled" text is stale — the tests mandate wrap-only.
 - **`SearchHit` not Equatable/Hashable (note).** Add via extension if Plan 3 diffing needs it.
+- **Agent rows render "Agent Agent" pre-input (Minor cosmetic, 2026-07-10 smoke).** Between tool_use start and the input arriving, name and summary are both the placeholder "Agent". Suppress the summary until it differs from the name. → 4b polish.
+- **Inspector chrome (✕/Back) are plain Buttons (note).** The panel body re-renders during live streams — if the churn-cancellation disease (see TimelineItemViews row note) ever appears on panel chrome, give them the same tap-gesture treatment. Not observed in the 2026-07-10 smoke. → watch.
