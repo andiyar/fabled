@@ -5,10 +5,11 @@ struct ConversationView: View {
     let session: ChatSession
     @State private var inspectedID: String?
     @State private var isInspectorPresented = false
-    /// Trail of previously inspected ids: drilling from a Task's detail into a
-    /// subagent sub-row pushes the Task here, and the panel's Back button pops
-    /// it — without this the only way back up is re-clicking the transcript
-    /// row (Ben, 2026-07-10 live smoke).
+    /// Navigation trail of previously inspected ids: any click that switches
+    /// the panel to a different item pushes the old one, and the panel's Back
+    /// button pops it (drill-down into subagent sub-rows is the motivating
+    /// case — Ben, 2026-07-10 live smoke — but the trail is deliberately
+    /// browser-like across plain row clicks too).
     @State private var inspectBackStack: [String] = []
 
     /// Resolves the inspected id against the main timeline and all subagent
@@ -134,10 +135,20 @@ struct ConversationView: View {
                            })
                 .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
         }
-        // Dismissing the panel (✕ or ⌥⌘I) ends the drill-down trail; a fresh
-        // inspection starts from a clean stack.
+        // Clearing the selection (the panel's ✕) ends the trail; ⌥⌘I only
+        // toggles presentation and deliberately preserves selection + trail
+        // (the two-affordance split from the T6 design).
         .onChange(of: inspectedID) { _, new in
             if new == nil { inspectBackStack.removeAll() }
+        }
+        // RootView reuses this view across live-session switches (FOLLOWUPS
+        // reuse rider), so session-scoped selection state must reset by hand:
+        // timeline ids are only unique within a session (reducer fallback ids
+        // like "turn-N" collide across sessions), and a stale trail would walk
+        // Back into another session's items.
+        .onChange(of: session.id) { _, _ in
+            inspectedID = nil
+            inspectBackStack.removeAll()
         }
         .toolbar {
             ToolbarItemGroup {
