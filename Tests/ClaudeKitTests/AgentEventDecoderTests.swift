@@ -55,7 +55,7 @@ final class AgentEventDecoderTests: XCTestCase {
         let line = Data(#"""
         {"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01","type":"tool_result","content":"hello-from-test","is_error":false}]},"session_id":"s1","uuid":"u2"}
         """#.utf8)
-        guard case .toolResult(let results) = try AgentEventDecoder.decode(line) else {
+        guard case .toolResult(let results, _) = try AgentEventDecoder.decode(line) else {
             return XCTFail("expected toolResult")
         }
         XCTAssertEqual(results.count, 1)
@@ -128,5 +128,60 @@ final class AgentEventDecoderTests: XCTestCase {
         }
         XCTAssertEqual(resp.requestID, "init-1")
         XCTAssertEqual(resp.payload?["commands"]?.arrayValue?.count, 1)
+    }
+
+    func testToolResultCarriesParentToolUseID() throws {
+        let event = try AgentEventDecoder.decode(Data(
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done","is_error":false}]},"parent_tool_use_id":"task-99","uuid":"u1"}"#
+            .utf8))
+        guard case .toolResult(let results, "task-99") = event else {
+            return XCTFail("expected parented toolResult, got \(event)")
+        }
+        XCTAssertEqual(results.first?.toolUseID, "t1")
+    }
+
+    func testToolResultWithoutParentDecodesNil() throws {
+        let event = try AgentEventDecoder.decode(Data(
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]},"parent_tool_use_id":null,"uuid":"u1"}"#
+            .utf8))
+        guard case .toolResult(_, nil) = event else {
+            return XCTFail("got \(event)")
+        }
+    }
+
+    func testEventParentToolUseIDHelper() throws {
+        let parented = try AgentEventDecoder.decode(Data(
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"parent_tool_use_id":"task-7","uuid":"a1"}"#
+            .utf8))
+        XCTAssertEqual(parented.parentToolUseID, "task-7")
+        let main = try AgentEventDecoder.decode(Data(
+            #"{"type":"result","subtype":"success","is_error":false}"#.utf8))
+        XCTAssertNil(main.parentToolUseID)
+    }
+
+    /// Shape pinned from fixtures/2026-07-09-askuserquestion-answer.jsonl.
+    func testPermissionRequestInteractiveFields() throws {
+        let lines = try Fixtures.lines("2026-07-09-askuserquestion-answer.jsonl")
+        let events = try lines.map { try AgentEventDecoder.decode($0) }
+        let request = events.compactMap { event -> PermissionRequest? in
+            if case .controlRequest(let control) = event { return PermissionRequest(control) }
+            return nil
+        }.first
+        let unwrapped = try XCTUnwrap(request, "fixture must contain a can_use_tool request")
+        XCTAssertEqual(unwrapped.toolName, "AskUserQuestion")
+        XCTAssertTrue(unwrapped.requiresUserInteraction)
+        XCTAssertNotNil(unwrapped.toolUseID)
+        XCTAssertNotNil(unwrapped.input["questions"]?.arrayValue)
+    }
+
+    /// Ordinary Bash permission: interactive fields default off/nil.
+    func testPermissionRequestOrdinaryDefaults() throws {
+        let control = ControlRequest(
+            requestID: "r1", subtype: "can_use_tool",
+            payload: try JSONDecoder().decode(JSONValue.self, from: Data(
+                #"{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}"#.utf8)))
+        let request = try XCTUnwrap(PermissionRequest(control))
+        XCTAssertFalse(request.requiresUserInteraction)
+        XCTAssertNil(request.toolUseID)
     }
 }

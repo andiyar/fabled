@@ -72,22 +72,47 @@ public actor AgentSession {
         self.process = process
         self.stdinPipe = stdin
 
-        Task.detached {
-            let handle = stderr.fileHandleForReading
-            while let chunk = try? handle.read(upToCount: 65536), !chunk.isEmpty {}
+        // Pipe reads MUST happen on dedicated threads, never the cooperative
+        // pool: a blocking read() parks its pool thread indefinitely, and with
+        // a few sessions open the pool exhausts — later sessions' readers then
+        // never get scheduled and their children look silent (2026-07-10 bug:
+        // intermittent "Starting Claude…" hangs / invisible conversations;
+        // repro was 3 staggered spawns — only the first ever spoke).
+        let stderrHandle = stderr.fileHandleForReading
+        Thread.detachNewThread {
+            // Drained and discarded — an unread stderr pipe would eventually
+            // block the child once the buffer fills.
+            while !stderrHandle.availableData.isEmpty {}
+        }
+
+        let stdoutHandle = stdout.fileHandleForReading
+        let (chunks, chunkContinuation) = AsyncStream.makeStream(of: Data.self)
+        Thread.detachNewThread {
+            while true {
+                let chunk = stdoutHandle.availableData // blocks on the dedicated thread
+                if chunk.isEmpty {
+                    chunkContinuation.finish()
+                    return
+                }
+                chunkContinuation.yield(chunk)
+            }
         }
 
         readTask = Task { [weak self] in
-            do {
-                for try await line in stdout.fileHandleForReading.bytes.lines {
-                    guard let self else { return }
-                    if let event = try? AgentEventDecoder.decode(Data(line.utf8)) {
+            var lineBuffer = LineBuffer()
+            for await chunk in chunks {
+                guard let self else { return }
+                for line in lineBuffer.append(chunk) {
+                    if let event = try? AgentEventDecoder.decode(line) {
                         await self.emit(event)
                     }
                 }
-            } catch {
-                // Pipe closed — termination handler emits .terminated.
             }
+            if let tail = lineBuffer.finish(),
+               let event = try? AgentEventDecoder.decode(tail) {
+                await self?.emit(event)
+            }
+            // Pipe closed — termination handler emits .terminated.
         }
 
         write(Outbound.initialize(requestID: Self.initializeRequestID))
@@ -151,4 +176,5 @@ public actor AgentSession {
         continuation = nil
         readTask = nil
     }
+
 }

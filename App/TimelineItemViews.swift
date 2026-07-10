@@ -13,9 +13,14 @@ struct TimelineItemView: View {
             UserBubble(text: text)
         case .assistantText(_, let markdown, let isStreaming):
             AssistantTextView(markdown: markdown, isStreaming: isStreaming)
-        case .toolCall(_, let name, let summary, let input, let result, let isError, let isRunning):
-            ToolCallCard(name: name, summary: summary, input: input,
-                         result: result, isError: isError, isRunning: isRunning)
+        case .toolCall(let id, let name, let summary, let input, let result, let isError, let isRunning):
+            // Reads the whole subagentTimelines property (Observation tracks
+            // per stored property), so every visible tool row re-renders per
+            // parented event — bounded by LazyVStack's visible rows; revisit
+            // if a busy subagent janks the transcript (T11 review).
+            ToolCallCard(id: id, name: name, summary: summary, input: input,
+                         result: result, isError: isError, isRunning: isRunning,
+                         subagentSteps: session?.subagentTimelines[id]?.count)
         case .permission(_, let request, let resolution):
             // Static status row — the interactive card renders in ComposerView while pending.
             PermissionStatusView(request: request, resolution: resolution)
@@ -23,8 +28,8 @@ struct TimelineItemView: View {
             TurnSummaryView(result: result)
         case .notice(_, let text):
             NoticeView(text: text)
-        case .raw(_, let type, let raw):
-            RawEventView(type: type, raw: raw)
+        case .raw(let id, let type, let raw):
+            RawEventView(id: id, type: type, raw: raw)
         }
     }
 }
@@ -64,52 +69,59 @@ struct AssistantTextView: View {
     }
 }
 
+/// One-line tool row; all detail opens in the side inspector. Deliberately
+/// stateless — the old DisclosureGroup's @State reset when LazyVStack
+/// recycled rows (FOLLOWUPS rider, resolved by this design).
 struct ToolCallCard: View {
+    let id: String
     let name: String
     let summary: String
     let input: JSONValue
     let result: JSONValue?
     let isError: Bool?
     let isRunning: Bool
-    @State private var isExpanded = false
+    /// "N steps" chip for Task/Agent calls with routed subagent activity.
+    let subagentSteps: Int?
+    @Environment(\.inspectItem) private var inspectItem
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                if input != .object([:]), input != .null {
-                    Text(String(JSONPretty.string(input).prefix(4000)))
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-                if let result {
-                    Divider()
-                    Text(String(JSONPretty.string(result).prefix(4000)))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(isError == true ? Color.red : Color.secondary)
-                        .textSelection(.enabled)
-                }
+        HStack(spacing: 6) {
+            ToolStatusIcon(isError: isError, isRunning: isRunning)
+            Text(name).fontWeight(.medium)
+            Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            Spacer(minLength: 4)
+            if let subagentSteps, subagentSteps > 0 {
+                Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
             }
-            .padding(.top, 4)
-        } label: {
-            HStack(spacing: 6) {
-                statusIcon
-                Text(name).fontWeight(.medium)
-                Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
+                DiffCountChips(added: diff.added, removed: diff.removed)
             }
-            .font(.callout)
+            Image(systemName: "chevron.right")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
+        .font(.callout)
         .padding(8)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    @ViewBuilder private var statusIcon: some View {
-        if isRunning {
-            ProgressView().controlSize(.small)
-        } else if isError == true {
-            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-        } else {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        }
+        // Tap gesture instead of a Button: a plain Button's action is NOT
+        // delivered reliably in these row contexts — the inspect action lives
+        // in an environment value whose owning view re-renders frequently
+        // (live stream ticks; the history view re-inits ~1/s from sidebar
+        // reindex), and per-render invalidation cancels the Button's mouse-up
+        // press dispatch. Real-mouse evidence 2026-07-10: Button rows were
+        // intermittent/delayed/dead while quick chevron clicks survived (short
+        // press duration); TapGesture delivery was verified firing in this
+        // exact context (2026-07-09). The gesture + contentShape sit AFTER
+        // padding/background so the entire visible card is the hit target —
+        // inside the padding they leave a dead 8 pt ring around every row.
+        .contentShape(Rectangle())
+        .onTapGesture { inspectItem?(id) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .help("Show full input/output in the inspector")
     }
 }
 
@@ -167,19 +179,28 @@ struct NoticeView: View {
 }
 
 struct RawEventView: View {
+    let id: String
     let type: String
     let raw: JSONValue
-    @State private var isExpanded = false
+    @Environment(\.inspectItem) private var inspectItem
+
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            Text(String(JSONPretty.string(raw).prefix(4000)))
-                .font(.system(.caption2, design: .monospaced))
-                .textSelection(.enabled)
-        } label: {
+        HStack(spacing: 6) {
             Label(type, systemImage: "questionmark.square.dashed")
                 .font(.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
         .padding(6)
         .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
+        // Same rationale as ToolCallCard: TapGesture (not Button) so render
+        // churn can't cancel activation, applied outside padding/background so
+        // the whole card is the hit target.
+        .contentShape(Rectangle())
+        .onTapGesture { inspectItem?(id) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .help("Show raw event in the inspector")
     }
 }

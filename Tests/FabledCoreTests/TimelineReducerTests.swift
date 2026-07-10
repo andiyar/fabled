@@ -73,7 +73,8 @@ final class TimelineReducerTests: XCTestCase {
 
     func testEmptyToolResultListIsNoOp() throws {
         // Synthetic user lines ("[Request interrupted]", local-command echoes)
-        // decode to .toolResult([]) — they must not disturb the timeline.
+        // decode to .toolResult([], parentToolUseID: nil) — they must not
+        // disturb the timeline.
         let items = try reduceAll([
             #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hi"}]},"uuid":"a1"}"#,
             #"{"type":"user","message":{"role":"user","content":"<local-command-stdout>ok</local-command-stdout>"},"isReplay":true,"uuid":"x1"}"#,
@@ -81,12 +82,30 @@ final class TimelineReducerTests: XCTestCase {
         XCTAssertEqual(items.count, 1)
     }
 
-    func testSubagentTrafficIsIgnored() throws {
+    func testInteractiveGateRequestsRenderNoPermissionRow() throws {
         let items = try reduceAll([
-            #"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"sub"}},"parent_tool_use_id":"t9","uuid":"u1"}"#,
-            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"sub"}]},"parent_tool_use_id":"t9","uuid":"a1"}"#,
+            #"{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Color?","header":"C","options":[{"label":"Red","description":""}],"multiSelect":false}]},"requires_user_interaction":true}}"#,
         ])
-        XCTAssertTrue(items.isEmpty, "parent_tool_use_id != nil is subagent chatter (grouped UI is Plan 4)")
+        XCTAssertTrue(items.isEmpty,
+                      "interactive gates render in the composer slot, not the timeline")
+    }
+
+    func testOrdinaryPermissionStillRendersRow() throws {
+        let items = try reduceAll([
+            #"{"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"rm x"}}}"#,
+        ])
+        guard case .permission("p1", _, nil) = items.first else {
+            return XCTFail("got \(items)")
+        }
+    }
+
+    /// New contract: reduce() takes events as given — the CALLER routes
+    /// subagent traffic. A parented event handed to reduce() is rendered.
+    func testReducerNoLongerDropsParentedEvents() throws {
+        let items = try reduceAll([
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"sub"}]},"parent_tool_use_id":"task-1","uuid":"a1"}"#,
+        ])
+        XCTAssertEqual(items.count, 1, "routing is the caller's job now")
     }
 
     func testUserEchoAppends() {

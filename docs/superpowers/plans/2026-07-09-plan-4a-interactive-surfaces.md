@@ -1,5 +1,7 @@
 # Interactive Surfaces & Side Inspector Implementation Plan (Fabled Plan 4a)
 
+> **STATUS: EXECUTED — 2026-07-09. Manual gate pending.** All 12 tasks landed on `plan-4a-interactive-surfaces` via per-task implementer + independent spec and quality reviews; 178 → 213 tests, 0 failures; SwiftPM suite and Xcode app build both green at every task boundary. Executed amendments beyond the original text: T7 DiffCache (measured LCS cost) + retain-only-real-diffs; raw-string literal fixes (T3, T5 instances); T6 container-resolve inspector refactor (panel takes the resolved item + subagentItems slice); T8/T10 ForEach-keying notes (executed: options by label, todos by offset); T10 empty-TodoWrite contract pin (empty ≠ clear) + session-scoped card identity; T11 observation-cost ledger + chip pluralization. Deferred items are ledgered in FOLLOWUPS.md (Plan 4a T7/T8/T9/T10 sections) — headline rider for 4b: ConversationView identity across session switches. Live smokes for T8–T11 surfaces and the consolidated manual gate: pending.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The conversation pane stops being a JSON viewer: AskUserQuestion renders as a native option picker, plan mode gets a real review sheet, Edit/Write render as diffs, TodoWrite becomes a pinned checklist, subagent traffic groups under its Task card, and all deep detail moves into a side inspector (Electron parity) instead of inline disclosure.
@@ -578,7 +580,7 @@ final class InteractionModelTests: XCTestCase {
         XCTAssertEqual(ToolCallSummary.summarize(name: "AskUserQuestion", input: question),
                        "Which color?")
         let plan = try JSONDecoder().decode(JSONValue.self, from: Data(
-            #"{"plan":"# Add README\nmore"}"#.utf8))
+            ##"{"plan":"# Add README\nmore"}"##.utf8))
         XCTAssertEqual(ToolCallSummary.summarize(name: "ExitPlanMode", input: plan),
                        "# Add README")
         let todos = try JSONDecoder().decode(JSONValue.self, from: Data(
@@ -904,7 +906,7 @@ This **deliberately breaks existing `.respond(...)` assertions** in `ChatSession
                                   permissionMode: "plan")
         session.begin()
         try yieldEvent(continuation,
-            #"{"type":"control_request","request_id":"e1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# The Plan"},"requires_user_interaction":true}}"#)
+            ##"{"type":"control_request","request_id":"e1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# The Plan"},"requires_user_interaction":true}}"##)
         await waitUntil("plan gate") { session.pendingGate != nil }
         guard case .planApproval(let approval)? = session.pendingGate else { return XCTFail() }
         XCTAssertEqual(approval.plan, "# The Plan")
@@ -923,7 +925,7 @@ This **deliberately breaks existing `.respond(...)` assertions** in `ChatSession
         let session = ChatSession(connection: connection, workingDirectory: .init(filePath: "/tmp"))
         session.begin()
         try yieldEvent(continuation,
-            #"{"type":"control_request","request_id":"e2","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# P"},"requires_user_interaction":true}}"#)
+            ##"{"type":"control_request","request_id":"e2","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{"plan":"# P"},"requires_user_interaction":true}}"##)
         await waitUntil("gate") { session.pendingGate != nil }
         guard case .planApproval(let approval)? = session.pendingGate else { return XCTFail() }
         session.rejectPlan(approval, feedback: "needs a licence section")
@@ -1490,6 +1492,8 @@ git -C ~/Developer/Fabled commit -m "feat(app): side inspector replaces inline t
 
 Brief feature 1: Edit/Write/MultiEdit render as diffs with +/− counts; collapsed row shows counts, the inspector shows the full unified diff (routed per feature 17).
 
+> **Note from T5 quality review:** subagent tool traffic early-returns into `ChatSession.subagentTimelines` and never passes through the main event path. Anything here that caches or renders diffs must source subagent edits from `subagentTimelines` items (Task 11's drill-down) — they will not appear on the main timeline path.
+
 **Files:**
 - Modify: `App/InspectorView.swift` (diff section)
 - Modify: `App/TimelineItemViews.swift` (`ToolCallCard` chips)
@@ -1582,10 +1586,40 @@ struct DiffCountChips: View {
 }
 ```
 
-- [ ] **Step 2: Route diffs in the panel.** In `InspectorPanel.toolDetail`, insert directly under the `Text(summary)` line (replacing the Task 7 placeholder comment):
+- [ ] **Step 2: Cache diffs — never compute LCS in a view body.** *(Amended after Task 2's quality review measured the cost: ~2.9 µs for typical fragments but **1.9 ms release / 18 ms debug** at the 500-line cap — one large Edit card would eat the frame budget on every render.)* Append to `App/InspectorView.swift`:
 
 ```swift
-        if let diff = ToolDiff.from(toolName: name, input: input) {
+/// LCS diffs are cheap for typical fragments but ~2 ms at the size cap
+/// (measured, release) — far too hot for a view body that re-renders per
+/// scroll tick. One entry per tool_use id, revalidated by input equality
+/// (streamed inputs go {} → full input once, then never change).
+@MainActor
+final class DiffCache {
+    static let shared = DiffCache()
+    private var store: [String: (input: JSONValue, diff: ToolDiff?)] = [:]
+
+    func diff(id: String, toolName: String, input: JSONValue) -> ToolDiff? {
+        if let cached = store[id], cached.input == input { return cached.diff }
+        let diff = ToolDiff.from(toolName: toolName, input: input)
+        store[id] = (input, diff)
+        return diff
+    }
+}
+```
+
+Also add this doc comment on `ToolDiff.hunks` in `Sources/FabledCore/Diff.swift` (semantic trap flagged in review — no file offsets exist in the source data):
+
+```swift
+    /// One entry per edit: a FLAT line sequence (context/insert/delete),
+    /// not a positioned unified-diff hunk. Edit inputs are fragments, so
+    /// gutter line numbers are underivable and unchanged runs are not
+    /// folded — render as-is.
+```
+
+- [ ] **Step 3: Route diffs in the panel.** In `InspectorPanel.toolDetail`, insert directly under the `Text(summary)` line (replacing the Task 7 placeholder comment):
+
+```swift
+        if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
             sectionHeader("Changes", systemImage: "plus.forwardslash.minus")
             DiffSectionView(diff: diff)
         }
@@ -1594,32 +1628,47 @@ struct DiffCountChips: View {
 and make the raw Input section skip diff tools' bulky strings — wrap the existing Input section in:
 
 ```swift
-        if ToolDiff.from(toolName: name, input: input) == nil,
+        if DiffCache.shared.diff(id: id, toolName: name, input: input) == nil,
            input != .object([:]), input != .null {
 ```
 
-(For diff tools the "Changes" section IS the input; the raw JSON added nothing but noise. `ToolDiff.from` is called twice per render — small strings, LCS is micro­seconds; do not cache prematurely.)
+(For diff tools the "Changes" section IS the input; the raw JSON added nothing but noise. Both calls hit the cache.)
 
-- [ ] **Step 3: Count chips on the compact row.** In `ToolCallCard` (Task 6 version), replace the chips placeholder comment with:
+- [ ] **Step 4: Count chips on the compact row.** In `ToolCallCard` (Task 6 version), replace the chips placeholder comment with:
 
 ```swift
-                if let diff = ToolDiff.from(toolName: name, input: input) {
+                if let diff = DiffCache.shared.diff(id: id, toolName: name, input: input) {
                     DiffCountChips(added: diff.added, removed: diff.removed)
                 }
 ```
 
-- [ ] **Step 4: Build + smoke**
+- [ ] **Step 5: Pin the MultiEdit malformed-edit drop** (review test gap — makes the compactMap skip a documented choice). Append to `Tests/FabledCoreTests/DiffTests.swift`:
+
+```swift
+    func testMultiEditSkipsMalformedEditsButKeepsRest() throws {
+        let input = try json(
+            #"{"file_path":"/tmp/d.swift","edits":[{"old_string":"a","new_string":"b"},{"not_an_edit":true}]}"#)
+        let diff = try XCTUnwrap(ToolDiff.from(toolName: "MultiEdit", input: input))
+        XCTAssertEqual(diff.hunks.count, 1, "malformed edits drop; valid ones survive")
+        XCTAssertEqual(diff.added, 1)
+        XCTAssertEqual(diff.removed, 1)
+    }
+```
+
+Run: `swift test --filter DiffTests 2>&1 | tail -3` — 12 tests, 0 failures.
+
+- [ ] **Step 6: Build + smoke**
 
 Run: `swift build && xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled -configuration Debug build 2>&1 | tail -3`
 Expected: `** BUILD SUCCEEDED **`.
 
-Smoke: open a historical coding session with Edit/Write calls → rows show `+N −M` chips → inspector shows the colored unified diff for an Edit (old/new lines correct), a Write (all green), and — if the history has one — a MultiEdit (hunk per edit).
+Smoke: open a historical coding session with Edit/Write calls → rows show `+N −M` chips → inspector shows the colored unified diff for an Edit (old/new lines correct), a Write (all green), and — if the history has one — a MultiEdit (hunk per edit). Scrolling a transcript with many Edit rows stays smooth (the cache is doing its job).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git -C ~/Developer/Fabled add App
-git -C ~/Developer/Fabled commit -m "feat(app): unified diff rendering for Edit/Write/MultiEdit"
+git -C ~/Developer/Fabled/.worktrees/plan-4a add App Sources Tests
+git -C ~/Developer/Fabled/.worktrees/plan-4a commit -m "feat(app): unified diff rendering for Edit/Write/MultiEdit (cached)"
 ```
 
 ---
@@ -1627,6 +1676,8 @@ git -C ~/Developer/Fabled commit -m "feat(app): unified diff rendering for Edit/
 ## Task 8: AskUserQuestion — native option picker card
 
 Brief feature 2. Replaces the Task 5 placeholder. Single-select questions answer with one click when they're the whole prompt; multi-question and multi-select forms submit once, with free-text "Other" per question (any string is a legal answer — probe finding 2).
+
+> **Note from T3 quality review:** `QuestionPrompt.Option` is neither `Identifiable` nor `Hashable` — a `ForEach` over a question's options must key explicitly with `id: \.label`.
 
 **Files:**
 - Create: `App/QuestionCardView.swift`
@@ -1970,6 +2021,12 @@ git -C ~/Developer/Fabled commit -m "feat(app): plan-mode review sheet + approva
 
 Brief feature 4: a pinned, live-updating progress card above the composer; collapses when everything is done. Data (`ChatSession.todos`) landed in Task 5; the row summary ("2/5 done") landed in Task 3.
 
+> **Note from T3 quality review:** `TodoItem.id` is the todo's `content`, and nothing guarantees content uniqueness across a list. Do not write `ForEach(todos)` blindly — key by offset (`Array(todos.enumerated())` with `id: \.offset`) or make an explicit, documented uniqueness decision here.
+
+> **Note from T5 quality review:** `ChatSession` ignores an empty TodoWrite list (`if !parsed.isEmpty { todos = parsed }`), so "latest list wins" does NOT include clearing. Pin this contract here with a test either way: if keeping the guard, add a ChatSession test that an empty write leaves todos unchanged plus a comment explaining why empty ≠ clear (malformed-write protection); if the UI needs genuine clearing, change the guard deliberately and test that instead.
+
+> **Note from T10 quality review (executed):** rows are offset-keyed per the T3 note; the card carries a session-scoped `.id` so collapse state can't leak across session switches; the manual collapse toggle is deliberately sticky for the session (auto behavior does not resume after a manual toggle).
+
 **Files:**
 - Create: `App/TodoChecklistView.swift`
 - Modify: `App/ConversationView.swift` (pin above the composer)
@@ -2084,9 +2141,11 @@ git -C ~/Developer/Fabled commit -m "feat(app): pinned TodoWrite checklist card"
 
 Brief feature 5: parented traffic (routed since Task 5) becomes visible — the Task/Agent row shows live sub-step count, and the inspector shows the subagent's own mini-timeline (routed through the inspector per feature 17).
 
+> **Note from T11 quality review (executed):** the steps chip is pluralized ("1 step"); the badge computation carries an observation-cost ledger comment (whole-property tracking → visible rows re-render per parented event, bounded by LazyVStack). The consolidated smoke must exercise the live chip incrementing during a Task run and sub-row click-through to full I/O.
+
 **Files:**
 - Modify: `App/TimelineItemViews.swift` (`TimelineItemView`, `ToolCallCard`)
-- Modify: `App/InspectorView.swift` (panel: drill-down section; pass-through of live sub-timelines already wired in Task 6)
+- Modify: `App/InspectorView.swift` (panel: drill-down section; the container passes the inspected Task call's sub-timeline as `subagentItems` — T6 quality refactor)
 
 - [ ] **Step 1: Badge data into the card.** In `App/TimelineItemViews.swift`, `ToolCallCard` gains one property (after `isRunning`):
 
@@ -2118,15 +2177,16 @@ and renders it in the label `HStack`, next to the diff-chips slot:
 
 (Other `ToolCallCard(...)` construction sites, if any, pass `subagentSteps: nil`.)
 
-- [ ] **Step 2: Drill-down in the panel.** `InspectorPanel` already receives `subagentTimelines` (Task 6). In `toolDetail`, replace the Task 11 placeholder comment with:
+- [ ] **Step 2: Drill-down in the panel.** The container passes the inspected item's sub-timeline as `subagentItems` (T6 quality refactor). In `toolDetail`, replace the Task 11 placeholder comment with:
 
 ```swift
-        if let sub = subagentTimelines[id], !sub.isEmpty {
+        if let sub = subagentItems, !sub.isEmpty {
             sectionHeader("Subagent activity (\(sub.count) items)",
                           systemImage: "person.2.circle")
             VStack(alignment: .leading, spacing: 6) {
                 // Same vocabulary, read-only. Sub tool rows are inspectable
-                // too — resolvedItem already searches sub-timelines.
+                // too — the container's inspectedItem lookup already searches
+                // sub-timelines.
                 ForEach(sub) { item in
                     TimelineItemView(item: item, session: nil)
                 }
@@ -2196,11 +2256,11 @@ Expected: everything green, `** BUILD SUCCEEDED **`.
 
 Run through in the built app; every line must feel right, not merely function:
 
-1. **Inspector**: tool rows are calm one-liners; click → detail panel; ⌥⌘I; selection survives scrolling a 1000-item transcript (LazyVStack recycling).
+1. **Inspector**: tool rows are calm one-liners; click → detail panel; ⌥⌘I; selection survives scrolling a 1000-item transcript (LazyVStack recycling); with the inspector open DURING generation, a large tool result (big file read / wide grep) causes no main-thread jank (T6 quality review); in-panel ✕ clears selection while ⌥⌘I closes the panel — confirm that two-affordance split feels right.
 2. **Diffs**: an Edit shows a correct colored diff + `+N −M` chips; Write is all-green; MultiEdit shows hunk-per-edit.
 3. **AskUserQuestion**: single-question click-through; multi-question form; Skip; answers echoed correctly by Claude.
 4. **Plan mode**: full probe-plan flow — propose → request changes → revised → approve → toolbar mode flips to Default via the wire → implementation proceeds.
-5. **TodoWrite**: pinned card updates live, collapses at completion.
+5. **Todo checklist**: DORMANT on this CLI config — TodoWrite was replaced by TaskCreate/TaskUpdate/TaskList (2026-07-09 product finding; ToolSearch-confirmed live). The card is built and unit-tested but will not appear in normal use; skip live verification. 4b must feed it from the task tools (scoping note in the 4b digest/FOLLOWUPS).
 6. **Subagents**: Task chip counts steps live; main transcript uncluttered; drill-down works; no parent spinner flicker from subagent thinking.
 7. **Regressions**: ordinary permission cards (allow/always-allow/deny), interrupt (⌘.), model picker, resume/fork from history, multi-window — all as in Plan 3.
 

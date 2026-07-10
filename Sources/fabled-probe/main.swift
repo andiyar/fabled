@@ -37,7 +37,7 @@ for await event in await session.events {
             default: break
             }
         }
-    case .toolResult(let results):
+    case .toolResult(let results, _):
         for r in results { print("· result (error: \(r.isError))") }
     case .controlRequest(let req):
         if let perm = PermissionRequest(req) {
