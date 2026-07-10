@@ -2260,7 +2260,7 @@ Run through in the built app; every line must feel right, not merely function:
 2. **Diffs**: an Edit shows a correct colored diff + `+N −M` chips; Write is all-green; MultiEdit shows hunk-per-edit.
 3. **AskUserQuestion**: single-question click-through; multi-question form; Skip; answers echoed correctly by Claude.
 4. **Plan mode**: full probe-plan flow — propose → request changes → revised → approve → toolbar mode flips to Default via the wire → implementation proceeds.
-5. **TodoWrite**: pinned card updates live, collapses at completion.
+5. **Todo checklist**: DORMANT on this CLI config — TodoWrite was replaced by TaskCreate/TaskUpdate/TaskList (2026-07-09 product finding; ToolSearch-confirmed live). The card is built and unit-tested but will not appear in normal use; skip live verification. 4b must feed it from the task tools (scoping note in the 4b digest/FOLLOWUPS).
 6. **Subagents**: Task chip counts steps live; main transcript uncluttered; drill-down works; no parent spinner flicker from subagent thinking.
 7. **Regressions**: ordinary permission cards (allow/always-allow/deny), interrupt (⌘.), model picker, resume/fork from history, multi-window — all as in Plan 3.
 
