@@ -48,7 +48,7 @@ Deferred:
 
 Deferred:
 
-- **QuestionCardView a11y.** Custom radio/checkbox option rows carry no `.accessibilityAddTraits(.isSelected)` and aren't grouped as single a11y elements, so VoiceOver can't convey selection state; single-shot mode is also mouse-dependent unless Full Keyboard Access is on (no Answer button, send ⌘⏎ disabled while a gate shows). → backlog (a11y pass).
+- **QuestionCardView a11y.** Custom radio/checkbox option rows carry no `.accessibilityAddTraits(.isSelected)` and aren't grouped as single a11y elements, so VoiceOver can't convey selection state; single-shot mode is also mouse-dependent unless Full Keyboard Access is on (no Answer button, send ⌘⏎ disabled while a gate shows). Also fold in: tap-gesture tool rows (ba55f1f) carry `.isButton` traits but no explicit `.accessibilityAction` and no Full-Keyboard-Access focusability — the Button→TapGesture trade was evidence-driven (press-cancellation under churn), so restore keyboard/assistive activation by other means. → backlog (a11y pass).
 - **Answer-assembly logic is untestable where it lives.** Catalog ordering, ", " join, option-wins-over-free-text, trim, and free-text-alone completeness (probe finding 2) are private methods in the App-target view. Extract a pure `QuestionPrompt.assembleAnswers(selections:otherText:)` into FabledCore so FabledCoreTests can pin it — same pattern as the DiffCache relocation note above. → backlog.
 - **No height bound on long question forms.** 10+ options grow the composer card unbounded; wrap in a ScrollView with max height if long forms appear in practice. → backlog.
 
@@ -65,7 +65,7 @@ Deferred:
 
 Deferred:
 
-- **ConversationView is reused across live-session switches without identity.** Root cause of child-`@State` leaks: the todo card's collapse state (fixed in-task with a card-level `.id`) and the pre-existing T6 inspector state (`inspectedID`/`isInspectorPresented` persist across session switches — stale selection shows the empty panel, an open inspector stays open). The clean fix is `.id(session-identity)` on ConversationView in RootView.detail, then dropping the card-level `.id` — but audit the blast radius first: recreating the hierarchy on switch resets scroll position and would discard any @State composer draft (check where draft text lives before landing). → Plan 4b or a T12 rider.
+- **ConversationView is reused across live-session switches without identity.** Root cause of child-`@State` leaks: the todo card's collapse state (fixed in-task with a card-level `.id`) and the pre-existing T6 inspector state (`isInspectorPresented` persists across session switches — an open inspector stays open, by design for now). `inspectedID` and the Back-button trail `inspectBackStack` were also affected until the 2026-07-10 final review: both now reset via `.onChange(of: session.id)` in ConversationView (cross-session timeline ids collide on reducer fallback ids, so a stale trail could walk Back into another session's items). The clean root fix is still `.id(session-identity)` on ConversationView in RootView.detail, then dropping the card-level `.id` — but audit the blast radius first: recreating the hierarchy on switch resets scroll position and would discard any @State composer draft (check where draft text lives before landing). → Plan 4b or a T12 rider.
 - **Sticky manual collapse (note, decided).** Once the user toggles the todo card, auto-collapse behavior never resumes for that session — deliberate sticky-preference semantics; revisit only if gate feedback objects.
 
 ## From final Plan 1 gate review (2026-07-08)
@@ -80,7 +80,7 @@ Deferred:
 
 - **SIGTERM-only terminate (M2).** No SIGKILL escalation; a stuck child never dies. Add kill-after-timeout. → Plan 4 (session management).
 - **Byte-by-byte stdout reads (M4).** Only if profiling shows it matters. → backlog.
-- **Blocking stderr drain pins a cooperative-pool thread per live session.** `Task.detached` + blocking `read(upToCount:)` for the child's lifetime is fine at Mac-app session counts; switch to `readabilityHandler` or `handle.bytes` if session counts grow. → backlog (with M4).
+- **RESOLVED 2026-07-10 (8b58a7d) — and the original judgment here was wrong.** "Fine at Mac-app session counts" was disproved in production: cooperative-pool exhaustion from blocking pipe reads silenced sibling sessions' readers at 2–4 open sessions (stderr drain + FileHandle.bytes.lines both parked pool threads). All pipe reads now run on dedicated Threads. Scar: never block cooperative-pool threads on pipe/file I/O, at any session count.
 - **Dead `Process` retained after termination (M5).** Harmless; tidy when touching the file. → backlog.
 
 ## From Plan 2 reviews (2026-07-08, Tasks 1–11)
