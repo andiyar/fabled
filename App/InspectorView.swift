@@ -106,7 +106,9 @@ struct InspectorPanel: View {
             monospacedBlock(JSONPretty.string(raw))
         case .thinking(_, let text, _):
             sectionHeader("Thinking", systemImage: "sparkle")
-            Text(text)
+            // Same cap as monospacedBlock — the inspector must not hang the
+            // window on a pathological payload.
+            Text(String(text.prefix(200_000)))
                 .font(Theme.assistantFont(.callout)).italic()
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)

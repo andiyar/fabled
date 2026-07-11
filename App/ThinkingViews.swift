@@ -15,7 +15,7 @@ struct ThinkingItemView: View {
     private var streamingTail: String {
         guard text.count > 240 else { return text }
         let tail = text.suffix(240)
-        if let newline = tail.firstIndex(of: "\n"), newline != tail.endIndex {
+        if let newline = tail.firstIndex(of: "\n") {
             return "…" + tail[tail.index(after: newline)...]
         }
         return "…" + tail

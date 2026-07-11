@@ -131,6 +131,7 @@ public enum TimelineReducer {
     private static func reduceAssistant(_ items: inout [TimelineItem], _ message: AssistantMessage) {
         let baseID = message.raw["uuid"]?.stringValue ?? "assistant-\(items.count)"
         var textIndex = 0
+        var thinkIndex = 0
         for block in message.content {
             switch block {
             case .text(let text):
@@ -141,7 +142,8 @@ public enum TimelineReducer {
                 upsertToolCall(&items, id: id, name: name, input: input)
             case .thinking(let text):
                 guard !text.isEmpty else { break }
-                finalizeThinking(&items, text: text, fallbackID: "\(baseID)-think-\(textIndex)")
+                finalizeThinking(&items, text: text, fallbackID: "\(baseID)-think-\(thinkIndex)")
+                thinkIndex += 1
             case .unknown:
                 break
             }

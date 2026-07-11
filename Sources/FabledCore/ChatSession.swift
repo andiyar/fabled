@@ -328,6 +328,7 @@ public final class ChatSession: Identifiable {
             hasEnded = true
             isWorking = false
             isThinking = false
+            thinkingTokens = nil
             // Dead before the initialize handshake was ever acknowledged —
             // almost always a missing or unresolvable CLI. Surface it loudly
             // instead of a silent dead session in the sidebar. (`info == nil`

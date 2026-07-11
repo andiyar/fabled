@@ -446,6 +446,11 @@ final class ChatSessionTests: XCTestCase {
         {"type":"system","subtype":"thinking_tokens","estimated_tokens":44,"estimated_tokens_delta":17,"uuid":"tt1","session_id":"s"}
         """#)
         await waitUntil("ticker") { session.thinkingTokens == 44 }
+        // estimated_tokens is cumulative — each event reassigns, not adds.
+        try yield(continuation, #"""
+        {"type":"system","subtype":"thinking_tokens","estimated_tokens":61,"estimated_tokens_delta":17,"uuid":"tt2","session_id":"s"}
+        """#)
+        await waitUntil("ticker update") { session.thinkingTokens == 61 }
         try yield(continuation, #"""
         {"type":"result","subtype":"success","is_error":false,"num_turns":1,"duration_ms":5,"session_id":"s"}
         """#)
