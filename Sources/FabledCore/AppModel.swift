@@ -209,11 +209,27 @@ public final class AppModel {
     }
 
     /// Resume/fork replays nothing on the wire (probe finding 8) — the
-    /// timeline is seeded from the on-disk transcript.
+    /// timeline is seeded from the on-disk transcript. Continue reattaches
+    /// the SAME session id, so a second live process on that id is forbidden
+    /// (one-process invariant): an existing attachment is selected instead.
     public func resume(_ summary: SessionSummary, fork: Bool) async {
-        let seed = await historicalTimeline(for: summary)
-        var configuration = SessionConfiguration(
-            workingDirectory: workingDirectory(for: summary))
+        if !fork, let existing = liveSessions.first(
+            where: { $0.resumedSessionID == summary.id }) {
+            selection = .live(existing.id)
+            return
+        }
+        var seed = await historicalTimeline(for: summary)
+        let resolved = resolveWorkingDirectory(for: summary)
+        if fork {
+            seed = [.notice(id: "fork-origin",
+                            text: "Forked from “\(summary.title)” — this is a new session id.")]
+                + seed
+        }
+        if resolved.didFallBack {
+            seed = seed + [.notice(id: "cwd-fallback",
+                                   text: "Original folder \(summary.project.originalPath) no longer exists — running in your home folder instead.")]
+        }
+        var configuration = SessionConfiguration(workingDirectory: resolved.url)
         configuration.resumeSessionID = summary.id
         configuration.forkSession = fork
         configuration.effort = preferredEffort
@@ -268,13 +284,17 @@ public final class AppModel {
         }
     }
 
-    private func workingDirectory(for summary: SessionSummary) -> URL {
+    /// Resolves a summary's original cwd; falls back to $HOME when the
+    /// project folder no longer exists — and SAYS so (feature 16 rider:
+    /// the fallback used to be silent).
+    public func resolveWorkingDirectory(for summary: SessionSummary)
+        -> (url: URL, didFallBack: Bool) {
         let path = summary.project.originalPath
-        // Unresolvable flattened names (deleted directories) fall back to home.
-        guard path.hasPrefix("/") else {
-            return FileManager.default.homeDirectoryForCurrentUser
+        guard path.hasPrefix("/"),
+              FileManager.default.fileExists(atPath: path) else {
+            return (FileManager.default.homeDirectoryForCurrentUser, true)
         }
-        return URL(fileURLWithPath: path)
+        return (URL(fileURLWithPath: path), false)
     }
 }
 

@@ -84,13 +84,21 @@ struct HistoricalSessionView: View {
                 }
                 .help("Toggle inspector")
                 .keyboardShortcut("i", modifiers: [.command, .option])
-                Button("Resume") { Task { await app.resume(summary, fork: false) } }
+                Button("Continue") { Task { await app.resume(summary, fork: false) } }
+                    .buttonStyle(.borderedProminent).tint(Theme.clay)
+                    .help("Reattach a live session to this same session id")
                 Button("Fork") { Task { await app.resume(summary, fork: true) } }
+                    .help("Branch a NEW session seeded with this history")
             }
         }
         .task(id: summary.id) {
+            let requested = summary.id
             items = nil
-            items = await app.historicalTimeline(for: summary)
+            let loaded = await app.historicalTimeline(for: summary)
+            // Rapid switching: a slow load must not land on a newer selection
+            // (FOLLOWUPS stale-assignment window).
+            guard !Task.isCancelled, requested == summary.id else { return }
+            items = loaded
         }
     }
 }

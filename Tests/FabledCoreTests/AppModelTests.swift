@@ -144,4 +144,41 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(projects.isEmpty)
         XCTAssertEqual(Set(projects.map(\.id)).count, projects.count, "no duplicates")
     }
+
+    @MainActor
+    func testResumeCollisionSelectsExistingLiveSession() async throws {
+        let (model, _) = try makeModel()
+        let (connection, _, _) = makeFakeConnection()
+        let live = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"),
+            resumedSessionID: "abc-123")
+        model.adoptForTesting(live)
+        let summary = SessionSummary(
+            id: "abc-123",
+            project: ProjectFolder(flattenedName: "-tmp-demo",
+                                   originalPath: "/tmp/demo",
+                                   directoryURL: URL(fileURLWithPath: "/tmp/demo")),
+            fileURL: URL(fileURLWithPath: "/tmp/demo/abc-123.jsonl"),
+            title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        await model.resume(summary, fork: false)
+        XCTAssertEqual(model.liveSessions.count, 1, "no duplicate spawn")
+        XCTAssertEqual(model.selection, .live(live.id))
+    }
+
+    @MainActor
+    func testFallbackDirectoryIsFlagged() throws {
+        let (model, _) = try makeModel()
+        let gone = SessionSummary(
+            id: "x",
+            project: ProjectFolder(flattenedName: "-gone-project",
+                                   originalPath: "-gone-project",   // unresolvable
+                                   directoryURL: URL(fileURLWithPath: "/nope")),
+            fileURL: URL(fileURLWithPath: "/nope/x.jsonl"),
+            title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        let resolved = model.resolveWorkingDirectory(for: gone)
+        XCTAssertTrue(resolved.didFallBack)
+        XCTAssertEqual(resolved.url,
+                       FileManager.default.homeDirectoryForCurrentUser)
+    }
 }
