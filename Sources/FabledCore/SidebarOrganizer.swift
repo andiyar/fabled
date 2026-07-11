@@ -59,20 +59,19 @@ public struct SidebarOptions: Codable, Equatable, Sendable {
     public init() {}
 }
 
-/// One rendered sidebar section.
-public struct SidebarSection: Identifiable, Sendable, Equatable {
+/// One rendered sidebar section. `id` is a stable synthetic key
+/// ("pinned" / "project-<id>" / "date-<bucket>" / "sessions"), NOT the
+/// title: titles collide (two checkouts named "Fabled"; a project literally
+/// named "Pinned") and ForEach must still see distinct sections.
+public struct SidebarSection: Identifiable, Sendable {
+    public let id: String
     public let title: String
     public var sessions: [SessionSummary]
-    public var id: String { title }
 
-    public init(title: String, sessions: [SessionSummary]) {
+    public init(id: String, title: String, sessions: [SessionSummary]) {
+        self.id = id
         self.title = title
         self.sessions = sessions
-    }
-
-    // SessionSummary isn't Equatable, so identity-compare by title + ids.
-    public static func == (lhs: SidebarSection, rhs: SidebarSection) -> Bool {
-        lhs.title == rhs.title && lhs.sessions.map(\.id) == rhs.sessions.map(\.id)
     }
 }
 
@@ -101,22 +100,32 @@ public enum SidebarOrganizer {
 
         var sections: [SidebarSection] = []
         if !pinned.isEmpty {
-            sections.append(SidebarSection(title: "Pinned", sessions: pinned))
+            sections.append(SidebarSection(id: "pinned", title: "Pinned", sessions: pinned))
         }
         switch options.groupBy {
         case .none:
             if !rest.isEmpty {
-                sections.append(SidebarSection(title: "Sessions", sessions: rest))
+                sections.append(SidebarSection(id: "sessions", title: "Sessions",
+                                               sessions: rest))
             }
         case .project:
+            // Key by project IDENTITY: two checkouts sharing a leaf name
+            // ("Fabled") stay separate sections; the leaf is only the title.
             var order: [String] = []
+            var titles: [String: String] = [:]
             var groups: [String: [SessionSummary]] = [:]
             for summary in rest {
-                let key = summary.project.displayName
-                if groups[key] == nil { order.append(key) }
+                let key = summary.project.id
+                if groups[key] == nil {
+                    order.append(key)
+                    titles[key] = summary.project.displayName
+                }
                 groups[key, default: []].append(summary)
             }
-            sections += order.map { SidebarSection(title: $0, sessions: groups[$0]!) }
+            sections += order.map {
+                SidebarSection(id: "project-\($0)", title: titles[$0]!,
+                               sessions: groups[$0]!)
+            }
         case .date:
             let calendar = Calendar.current
             var buckets: [(String, [SessionSummary])] =
@@ -136,7 +145,8 @@ public enum SidebarOrganizer {
                 buckets[bucket].1.append(summary)
             }
             sections += buckets.compactMap { title, sessions in
-                sessions.isEmpty ? nil : SidebarSection(title: title, sessions: sessions)
+                sessions.isEmpty ? nil
+                    : SidebarSection(id: "date-\(title)", title: title, sessions: sessions)
             }
         }
         return sections

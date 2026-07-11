@@ -3,7 +3,12 @@ import ClaudeKit
 @testable import FabledCore
 
 final class SidebarOrganizerTests: XCTestCase {
-    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    // Local noon: a fixed epoch is local midnight *somewhere* (1.8e9 is
+    // exactly 00:00 in UTC-8), where a sub-day offset like `daysAgo: 0.01`
+    // crosses the day boundary and breaks the date buckets. From noon, no
+    // sub-day fixture can cross a boundary in any timezone.
+    private let now = Calendar.current.date(
+        from: DateComponents(year: 2027, month: 1, day: 15, hour: 12))!
 
     private func summary(_ id: String, project: String, daysAgo: Double,
                          title: String? = nil) -> SessionSummary {
@@ -35,9 +40,11 @@ final class SidebarOrganizerTests: XCTestCase {
         let sections = SidebarOrganizer.organize(
             [summary("today", project: "p", daysAgo: 0.01),
              summary("yesterday", project: "p", daysAgo: 1.0),
+             summary("thisWeek", project: "p", daysAgo: 4),
              summary("old", project: "p", daysAgo: 9)],
             options: options, now: now)
-        XCTAssertEqual(sections.map(\.title), ["Today", "Yesterday", "Earlier"])
+        XCTAssertEqual(sections.map(\.title),
+                       ["Today", "Yesterday", "This week", "Earlier"])
     }
 
     func testActivityWindowFiltersStaleSessions() {
@@ -73,6 +80,27 @@ final class SidebarOrganizerTests: XCTestCase {
         XCTAssertEqual(sections.first?.sessions.map(\.id), ["c"])
         XCTAssertEqual(sections.dropFirst().flatMap(\.sessions).map(\.id), ["a"],
                        "pinned sessions leave their home group and dodge the window filter")
+    }
+
+    func testSameLeafNameProjectsStayDistinct() {
+        // Two checkouts sharing a leaf name must not merge (grouping keys by
+        // project identity; the leaf name is only the section title).
+        func checkout(_ id: String, root: String) -> SessionSummary {
+            let project = ProjectFolder(
+                flattenedName: "-tmp-\(root)-Fabled",
+                originalPath: "/tmp/\(root)/Fabled",
+                directoryURL: URL(fileURLWithPath: "/tmp/\(root)/Fabled"))
+            return SessionSummary(
+                id: id, project: project,
+                fileURL: URL(fileURLWithPath: "/tmp/\(root)/Fabled/\(id).jsonl"),
+                title: id, lastActivity: now, approximateSizeBytes: 1)
+        }
+        let sections = SidebarOrganizer.organize(
+            [checkout("a", root: "a"), checkout("b", root: "b")],
+            options: SidebarOptions(), now: now)
+        XCTAssertEqual(sections.count, 2)
+        XCTAssertEqual(sections.map(\.title), ["Fabled", "Fabled"])
+        XCTAssertEqual(Set(sections.map(\.id)).count, 2, "distinct section ids")
     }
 
     func testOptionsRoundTripThroughJSON() throws {
