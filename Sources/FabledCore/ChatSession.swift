@@ -59,6 +59,11 @@ public final class ChatSession: Identifiable {
     /// A rejected op runs its revert so the toolbar can't hold a stale label
     /// (FOLLOWUPS: optimistic control ops).
     private var pendingControlReverts: [String: () -> Void] = [:]
+    /// Error acks that arrived before their op's revert was registered —
+    /// the registration hops through the sending Task's MainActor resume,
+    /// so a fast ack can beat it. registerRevert drains this on arrival,
+    /// making ack/registration ordering irrelevant. request id → reason.
+    private var unmatchedErrorAcks: [String: String] = [:]
 
     private let connection: AgentConnection
     private var consumeTask: Task<Void, Never>?
@@ -156,6 +161,10 @@ public final class ChatSession: Identifiable {
         hasSentMessage = true
         turnsInFlight += 1
         isWorking = true
+        // Liveness baseline: without this, the quiet-clock inherits the idle
+        // gap since the previous turn's last event and the status row shows an
+        // inflated "no response for Ns" the moment a message is sent.
+        lastEventAt = Date()
         Task { await connection.send(trimmed) }
     }
 
@@ -218,8 +227,12 @@ public final class ChatSession: Identifiable {
         Task {
             let requestID = await connection.setModel(value)
             registerRevert(requestID) { [weak self] in
-                self?.currentModel = previous
-                self?.modelExplicitlyChosen = previousChosen
+                // Last write wins: only revert if this op's optimistic value
+                // is still current — a stale error ack must not clobber a
+                // newer successful pick.
+                guard let self, self.currentModel == value else { return }
+                self.currentModel = previous
+                self.modelExplicitlyChosen = previousChosen
             }
         }
     }
@@ -230,13 +243,27 @@ public final class ChatSession: Identifiable {
         Task {
             let requestID = await connection.setPermissionMode(mode)
             registerRevert(requestID) { [weak self] in
-                self?.permissionMode = previous
+                // Last write wins — see setModel.
+                guard let self, self.permissionMode == mode else { return }
+                self.permissionMode = previous
             }
         }
     }
 
     private func registerRevert(_ requestID: String, _ revert: @escaping () -> Void) {
+        // The ack may have beaten this registration (it hops through the
+        // sending Task's MainActor resume) — settle immediately from the stash.
+        if let reason = unmatchedErrorAcks.removeValue(forKey: requestID) {
+            revert()
+            noteControlError(requestID: requestID, reason: reason)
+            return
+        }
         pendingControlReverts[requestID] = revert
+    }
+
+    private func noteControlError(requestID: String, reason: String) {
+        timeline = timeline + [.notice(
+            id: "control-error-\(requestID)", text: reason)]
     }
 
     /// Sends the CLI's own /effort command as user text (probe finding 2):
@@ -325,10 +352,15 @@ public final class ChatSession: Identifiable {
             if let revert = pendingControlReverts.removeValue(forKey: envelope.requestID) {
                 if envelope.subtype == "error" {
                     revert()
-                    let reason = envelope.errorMessage ?? "The CLI rejected the change."
-                    timeline = timeline + [.notice(
-                        id: "control-error-\(envelope.requestID)", text: reason)]
+                    noteControlError(
+                        requestID: envelope.requestID,
+                        reason: envelope.errorMessage ?? "The CLI rejected the change.")
                 }
+            } else if envelope.subtype == "error" {
+                // No revert registered yet — the ack beat the registration.
+                // Stash it; registerRevert settles it on arrival.
+                unmatchedErrorAcks[envelope.requestID] =
+                    envelope.errorMessage ?? "The CLI rejected the change."
             }
         case .controlRequest(let request):
             if let permission = PermissionRequest(request) {

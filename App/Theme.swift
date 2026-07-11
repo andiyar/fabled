@@ -34,7 +34,7 @@ enum Theme {
 
     /// Needs input — unmissable orange. Icon: exclamationmark.bubble.fill.
     static let statusNeedsInput = Color(red: 0xE0 / 255, green: 0x8A / 255, blue: 0x3C / 255)
-    /// Working — clay. Icon: circle.dotted (animated).
+    /// Working — clay. Icon: circle.dotted.circle.
     static let statusWorking = clay
     /// Idle-with-history / ready for review — calm blue. Icon: tray.full.
     static let statusReady = Color(red: 0x4E / 255, green: 0x8F / 255, blue: 0xD1 / 255)

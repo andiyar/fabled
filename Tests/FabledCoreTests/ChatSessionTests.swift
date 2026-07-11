@@ -487,9 +487,6 @@ final class ChatSessionTests: XCTestCase {
         guard case .setModel(_, let requestID) = entries.first else {
             return XCTFail("expected setModel, got \(entries)")
         }
-        // The revert registration hops through the sending Task's MainActor
-        // resume — the ack must not be handled before it lands.
-        try await Task.sleep(for: .milliseconds(20))
         // Error ack with the recorded request id (badmodel fixture shape).
         try yield(continuation, #"""
         {"type":"control_response","response":{"subtype":"error","request_id":"\#(requestID)","error":"Model \"totally-bogus-model-9000\" is not a recognized model id."}}
@@ -509,11 +506,14 @@ final class ChatSessionTests: XCTestCase {
         guard case .setPermissionMode(_, let requestID) = entries.first else {
             return XCTFail("expected setPermissionMode, got \(entries)")
         }
-        try await Task.sleep(for: .milliseconds(20))
         try yield(continuation, #"""
         {"type":"control_response","response":{"subtype":"error","request_id":"\#(requestID)","error":"nope"}}
         """#)
         await waitUntil("revert") { session.permissionMode == "default" }
+        XCTAssertTrue(session.timeline.contains {
+            if case .notice(_, let text) = $0 { return text.contains("nope") }
+            return false
+        }, "the rejection reason surfaces as a notice")
     }
 
     func testSuccessAckKeepsOptimisticValue() async throws {
@@ -523,7 +523,6 @@ final class ChatSessionTests: XCTestCase {
         guard case .setModel(_, let requestID) = entries.first else {
             return XCTFail("expected setModel, got \(entries)")
         }
-        try await Task.sleep(for: .milliseconds(20))
         try yield(continuation, #"""
         {"type":"control_response","response":{"subtype":"success","request_id":"\#(requestID)","response":{}}}
         """#)
@@ -538,5 +537,52 @@ final class ChatSessionTests: XCTestCase {
         {"type":"system","subtype":"status","status":"requesting","uuid":"s1","session_id":"s"}
         """#)
         await waitUntil("stamp") { session.lastEventAt != nil }
+    }
+
+    func testSendResetsLivenessBaseline() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"system","subtype":"status","status":"requesting","uuid":"s1","session_id":"s"}
+        """#)
+        await waitUntil("stamp") { session.lastEventAt != nil }
+        let captured = try XCTUnwrap(session.lastEventAt)
+        try await Task.sleep(for: .milliseconds(30))
+        session.send("hi")
+        let after = try XCTUnwrap(session.lastEventAt)
+        XCTAssertGreaterThan(after, captured,
+                             "send must reset the quiet-clock baseline")
+    }
+
+    func testStaleErrorAckDoesNotClobberNewerPick() async throws {
+        let (session, continuation, recorder) = makeSession()
+        session.setModel("model-a")
+        session.setModel("model-b")
+        let entries = await waitForEntries(recorder, count: 2)
+        var reqA: String?
+        var reqB: String?
+        for entry in entries {
+            if case .setModel("model-a", let id) = entry { reqA = id }
+            if case .setModel("model-b", let id) = entry { reqB = id }
+        }
+        let staleID = try XCTUnwrap(reqA)
+        let newerID = try XCTUnwrap(reqB)
+        // The newer pick succeeds…
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"\#(newerID)","response":{}}}
+        """#)
+        // …then the older pick's rejection arrives late. Its revert must not
+        // clobber the newer value (last write wins).
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"error","request_id":"\#(staleID)","error":"stale rejection"}}
+        """#)
+        await waitUntil("stale ack processed") {
+            session.timeline.contains {
+                if case .notice(let id, _) = $0 {
+                    return id == "control-error-\(staleID)"
+                }
+                return false
+            }
+        }
+        XCTAssertEqual(session.currentModel, "model-b")
     }
 }
