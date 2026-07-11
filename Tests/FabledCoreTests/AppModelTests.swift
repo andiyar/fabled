@@ -143,6 +143,13 @@ final class AppModelTests: XCTestCase {
         let projects = model.recentProjects(limit: 10)
         XCTAssertFalse(projects.isEmpty)
         XCTAssertEqual(Set(projects.map(\.id)).count, projects.count, "no duplicates")
+        // recentProjects mirrors history order (history.map(\.project) prefixed).
+        XCTAssertEqual(projects.map(\.id),
+                       Array(model.history.map(\.project.id).prefix(10)),
+                       "recentProjects mirrors history order")
+        // This corpus is a single project group, so the dedup concern is moot
+        // here; the ordering contract above still holds if the corpus grows.
+        XCTAssertEqual(projects.count, 1)
     }
 
     @MainActor

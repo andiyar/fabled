@@ -3,12 +3,12 @@ import FabledCore
 
 struct ComposerView: View {
     let session: ChatSession
-    @State private var draft = ""
     @FocusState private var isFocused: Bool
     @State private var reviewingPlan: PlanApproval?
 
     var body: some View {
-        VStack(spacing: 8) {
+        @Bindable var session = session
+        return VStack(spacing: 8) {
             if let gate = session.pendingGate {
                 switch gate {
                 case .permission(let request):
@@ -31,7 +31,7 @@ struct ComposerView: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message Claude…", text: $draft, axis: .vertical)
+                TextField("Message Claude…", text: $session.draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...8)
                     .focused($isFocused)
@@ -77,13 +77,13 @@ struct ComposerView: View {
     }
 
     private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !session.hasEnded
     }
 
     private func send() {
         guard canSend else { return }
-        session.send(draft)
-        draft = ""
+        session.send(session.draft)
+        session.draft = ""
     }
 }

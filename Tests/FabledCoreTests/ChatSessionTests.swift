@@ -607,4 +607,15 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertEqual(detail, "replied with READY-OK")
         XCTAssertEqual(duration, 45000)
     }
+
+    func testDraftIsSessionState() {
+        let (connection, _, _) = makeFakeConnection()
+        let a = ChatSession(connection: connection,
+                            workingDirectory: URL(fileURLWithPath: "/tmp/a"))
+        let b = ChatSession(connection: connection,
+                            workingDirectory: URL(fileURLWithPath: "/tmp/b"))
+        a.draft = "half-typed thought"
+        XCTAssertEqual(a.draft, "half-typed thought")
+        XCTAssertEqual(b.draft, "", "drafts never leak across sessions")
+    }
 }

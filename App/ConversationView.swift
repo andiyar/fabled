@@ -3,8 +3,10 @@ import FabledCore
 
 struct ConversationView: View {
     let session: ChatSession
+    /// Hoisted to RootView so an open inspector survives per-session hierarchy
+    /// recreation (the deliberate T6 behavior). Owned there, bound here.
+    @Binding var isInspectorPresented: Bool
     @State private var inspectedID: String?
-    @State private var isInspectorPresented = false
     /// Navigation trail of previously inspected ids: any click that switches
     /// the panel to a different item pushes the old one, and the panel's Back
     /// button pops it (drill-down into subagent sub-rows is the motivating
@@ -120,10 +122,6 @@ struct ConversationView: View {
                 : session.sessionTasks.map(\.checklistRow)
             if !checklistRows.isEmpty {
                 TodoChecklistView(rows: checklistRows)
-                    // Session-scoped identity: RootView reuses this view across
-                    // live-session switches (T10 quality review; removed in T15
-                    // when the whole hierarchy gets session identity).
-                    .id(session.id)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
                     .frame(maxWidth: Theme.contentMaxWidth)
@@ -155,16 +153,6 @@ struct ConversationView: View {
         // (the two-affordance split from the T6 design).
         .onChange(of: inspectedID) { _, new in
             if new == nil { inspectBackStack.removeAll() }
-        }
-        // RootView reuses this view across live-session switches (FOLLOWUPS
-        // reuse rider), so session-scoped selection state must reset by hand:
-        // timeline ids are only unique within a session (reducer fallback ids
-        // like "turn-N" collide across sessions), and a stale trail would walk
-        // Back into another session's items.
-        .onChange(of: session.id) { _, _ in
-            inspectedID = nil
-            inspectBackStack.removeAll()
-            expandedGroups.removeAll()
         }
         .toolbar {
             ToolbarItemGroup {

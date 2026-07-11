@@ -34,6 +34,10 @@ public final class ChatSession: Identifiable {
     public private(set) var timeline: [TimelineItem] = []
     public private(set) var pendingGates: [InteractionGate] = []
     public var pendingGate: InteractionGate? { pendingGates.first }
+    /// The composer's unsent text. Session state, not view state: RootView
+    /// swaps ConversationView across sessions, and a draft typed for session
+    /// A must be waiting when Ben switches back (4a T10 reuse rider).
+    public var draft = ""
     public private(set) var isWorking = false
     public private(set) var isThinking = false
     /// Cumulative estimated thinking tokens for the current turn, from

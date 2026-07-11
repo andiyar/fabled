@@ -136,6 +136,9 @@ struct WelcomeView: View {
             .padding(Theme.spaceM)
             .background(.quinary, in: RoundedRectangle(cornerRadius: Theme.radiusPanel))
         }
+        // Type-to-start: land focus in the composer so the welcome screen is
+        // usable from the keyboard on appear (the @FocusState was otherwise dead).
+        .onAppear { composerFocused = true }
     }
 
     private var canStart: Bool {
