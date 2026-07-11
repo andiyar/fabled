@@ -31,15 +31,20 @@ struct SidebarView: View {
         if !app.liveSessions.isEmpty {
             Section("Live") {
                 ForEach(app.liveSessions) { session in
-                    HStack(spacing: 8) {
-                        Circle().fill(dotColor(session.activityState))
-                            .frame(width: 8, height: 8)
+                    HStack(spacing: Theme.spaceS) {
+                        SessionStatusBadge(state: session.activityState)
                         VStack(alignment: .leading) {
                             Text(session.title).lineLimit(1)
-                            Text(session.workingDirectory.lastPathComponent)
+                                .fontWeight(session.activityState == .needsApproval
+                                    ? .semibold : .regular)
+                            Text(statusLine(for: session))
                                 .font(.caption).foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
+                    .listRowBackground(
+                        session.activityState == .needsApproval
+                            ? Theme.statusNeedsInput.opacity(0.10) : nil)
                     .tag(AppModel.Selection.live(session.id))
                     .contextMenu {
                         Button("End Session", role: .destructive) {
@@ -84,12 +89,9 @@ struct SidebarView: View {
         }
     }
 
-    private func dotColor(_ state: ChatSession.ActivityState) -> Color {
-        switch state {
-        case .working: Theme.clay
-        case .needsApproval: .red
-        case .idle: .green
-        case .ended: .gray
-        }
+    /// Second line: what the session is waiting on beats where it lives.
+    private func statusLine(for session: ChatSession) -> String {
+        if let gate = session.pendingGate { return gate.summaryLine }
+        return session.workingDirectory.lastPathComponent
     }
 }
