@@ -165,6 +165,12 @@ public final class AppModel {
         return Array(result.prefix(limit))
     }
 
+    /// Composer project chip: recent projects, newest-session first
+    /// (history is already ordered that way).
+    public func recentProjects(limit: Int) -> [ProjectFolder] {
+        Array(history.map(\.project).prefix(limit))
+    }
+
     // MARK: - Search
 
     private func scheduleSearch() {
@@ -185,11 +191,16 @@ public final class AppModel {
 
     // MARK: - Session lifecycle
 
-    public func newSession(at directory: URL, model: String? = nil) async {
+    public func newSession(at directory: URL, model: String? = nil,
+                           firstMessage: String? = nil) async {
         var configuration = SessionConfiguration(workingDirectory: directory)
         configuration.model = model
         configuration.effort = preferredEffort
         await launch(configuration, seed: [])
+        if let firstMessage, case .live(let id) = selection,
+           let session = liveSessions.first(where: { $0.id == id }) {
+            session.send(firstMessage)
+        }
     }
 
     /// Resume/fork replays nothing on the wire (probe finding 8) — the
@@ -213,6 +224,11 @@ public final class AppModel {
         session.terminate()
         liveSessions.removeAll { $0.id == session.id }
         if selection == .live(session.id) { selection = nil }
+    }
+
+    /// Test seam: registers a live session without spawning a process.
+    public func adoptForTesting(_ session: ChatSession) {
+        liveSessions.append(session)
     }
 
     public func historicalTimeline(for summary: SessionSummary) async -> [TimelineItem] {

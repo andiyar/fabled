@@ -124,5 +124,24 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(recents.map(\.id),
                        recents.sorted { $0.lastActivity > $1.lastActivity }.map(\.id),
                        "newest first, across projects")
+        // Hardening: a live session resuming one of these ids must drop it from
+        // the recents (it renders in the live sections above instead).
+        let resumedID = recents[0].id
+        let (connection, _, _) = makeFakeConnection()
+        let live = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"),
+            resumedSessionID: resumedID)
+        model.adoptForTesting(live)
+        XCTAssertFalse(model.welcomeRecents(limit: 10).contains { $0.id == resumedID },
+                       "a live resumed session is excluded from welcome recents")
+    }
+
+    func testRecentProjectsAreOrderedAndDeduped() async throws {
+        let (model, _) = try makeModel()
+        await model.bootstrap()
+        let projects = model.recentProjects(limit: 10)
+        XCTAssertFalse(projects.isEmpty)
+        XCTAssertEqual(Set(projects.map(\.id)).count, projects.count, "no duplicates")
     }
 }

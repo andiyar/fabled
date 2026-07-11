@@ -9,6 +9,14 @@ struct WelcomeView: View {
     @Environment(AppModel.self) private var app
     let newSession: () -> Void
 
+    @State private var draft = ""
+    @State private var chosenProject: ProjectFolder?
+    @FocusState private var composerFocused: Bool
+
+    private var targetProject: ProjectFolder? {
+        chosenProject ?? app.recentProjects(limit: 1).first
+    }
+
     private var needsInput: [ChatSession] {
         app.liveSessions.filter { $0.activityState == .needsApproval }
     }
@@ -35,7 +43,7 @@ struct WelcomeView: View {
                     inboxSection("Open sessions", sessions: idleLive)
                 }
                 recentsSection
-                // T10 composer slot
+                composer
             }
             .padding(Theme.spaceXL)
             .frame(maxWidth: Theme.contentMaxWidth, alignment: .leading)
@@ -87,6 +95,62 @@ struct WelcomeView: View {
             }
         }
     }
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: Theme.spaceS) {
+            Text("Start a session").font(Theme.heading)
+            HStack(spacing: Theme.spaceS) {
+                Menu {
+                    ForEach(app.recentProjects(limit: 12)) { project in
+                        Button {
+                            chosenProject = project
+                        } label: {
+                            if project.id == targetProject?.id {
+                                Label(project.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(project.displayName)
+                            }
+                        }
+                        .help(project.originalPath)
+                    }
+                    Divider()
+                    Button("Open folder…", action: newSession)
+                } label: {
+                    Label(targetProject?.displayName ?? "Choose project",
+                          systemImage: "folder")
+                }
+                .fixedSize()
+                TextField("Message Claude to begin…", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...4)
+                    .focused($composerFocused)
+                    .onSubmit(startSession)
+                Button(action: startSession) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(canStart ? Theme.clay : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canStart)
+            }
+            .padding(Theme.spaceM)
+            .background(.quinary, in: RoundedRectangle(cornerRadius: Theme.radiusPanel))
+        }
+    }
+
+    private var canStart: Bool {
+        targetProject != nil
+            && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func startSession() {
+        guard canStart, let project = targetProject,
+              project.originalPath.hasPrefix("/") else { return }
+        let directory = URL(fileURLWithPath: project.originalPath)
+        let message = draft
+        draft = ""
+        Task { await app.newSession(at: directory, firstMessage: message) }
+    }
 }
 
 /// One live-session inbox row: status chip with WORDS, title, and — for
@@ -109,6 +173,7 @@ private struct WelcomeLiveRow: View {
                 .font(.caption).foregroundStyle(.tertiary)
             Image(systemName: "chevron.right")
                 .font(.caption2).foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
         .padding(Theme.spaceM)
         .background(.quinary, in: RoundedRectangle(cornerRadius: Theme.radiusCard))
@@ -119,6 +184,7 @@ private struct WelcomeLiveRow: View {
     }
 
     private var previewLine: String {
+        if session.hasEnded { return "Ended" }
         if let gate = session.pendingGate { return gate.summaryLine }
         if session.isWorking { return "Working…" }
         return "Ready"
@@ -141,6 +207,7 @@ private struct WelcomeRecentRow: View {
                 .font(.caption).foregroundStyle(.tertiary)
             Image(systemName: "chevron.right")
                 .font(.caption2).foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
         .padding(Theme.spaceM)
         .background(.quinary, in: RoundedRectangle(cornerRadius: Theme.radiusCard))
