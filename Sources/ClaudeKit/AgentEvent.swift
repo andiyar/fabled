@@ -72,6 +72,17 @@ public struct ControlResponseEnvelope: Sendable, Equatable {
     public let requestID: String
     public let subtype: String
     public let payload: JSONValue?
+    /// `response.error` on error acks — e.g. set_model's "not a recognized
+    /// model id" (fixtures/2026-07-09-badmodel-ack.jsonl). nil on success.
+    public let errorMessage: String?
+
+    public init(requestID: String, subtype: String, payload: JSONValue?,
+                errorMessage: String? = nil) {
+        self.requestID = requestID
+        self.subtype = subtype
+        self.payload = payload
+        self.errorMessage = errorMessage
+    }
 }
 
 public struct PermissionRequest: Sendable, Equatable {
@@ -123,6 +134,18 @@ public struct ToolResult: Sendable, Equatable {
     public let toolUseID: String
     public let content: JSONValue
     public let isError: Bool
+    /// The `user` line's structured `tool_use_result` payload (e.g. TaskCreate's
+    /// `{"task":{"id":"1",…}}`). Only attached when the line carries exactly one
+    /// tool_result block — the field is per-line, not per-block (probe finding 10).
+    public let toolUseResult: JSONValue?
+
+    public init(toolUseID: String, content: JSONValue, isError: Bool,
+                toolUseResult: JSONValue? = nil) {
+        self.toolUseID = toolUseID
+        self.content = content
+        self.isError = isError
+        self.toolUseResult = toolUseResult
+    }
 }
 
 public struct TurnResult: Sendable, Equatable {

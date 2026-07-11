@@ -8,6 +8,10 @@ public struct SessionConfiguration: Sendable {
     public var resumeSessionID: String?
     public var forkSession: Bool = false
     public var permissionMode: String?
+    /// Model effort level (low|medium|high|xhigh|max) — Claude Desktop passes
+    /// this on every spawn; measured on this repo: `medium` cut first visible
+    /// text 24s → 17s (probe finding 1). nil = CLI default.
+    public var effort: String?
     /// Emit Anthropic SSE deltas as `stream_event` lines. On by default:
     /// the conversation UI streams text as it generates.
     public var includePartialMessages = true
@@ -65,6 +69,7 @@ public struct SessionConfiguration: Sendable {
         ]
         if includePartialMessages { args.append("--include-partial-messages") }
         if let model { args += ["--model", model] }
+        if let effort { args += ["--effort", effort] }
         if let resumeSessionID { args += ["--resume", resumeSessionID] }
         if forkSession { args.append("--fork-session") }
         if let permissionMode { args += ["--permission-mode", permissionMode] }

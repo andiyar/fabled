@@ -184,4 +184,50 @@ final class AgentEventDecoderTests: XCTestCase {
         XCTAssertFalse(request.requiresUserInteraction)
         XCTAssertNil(request.toolUseID)
     }
+
+    func testToolResultCarriesToolUseResult() throws {
+        let line = ##"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01M4","type":"tool_result","content":"Task #1 created successfully: Alpha task"}]},"parent_tool_use_id":null,"session_id":"7d97","uuid":"u1","tool_use_result":{"task":{"id":"1","subject":"Alpha task"}}}"##
+        let event = try AgentEventDecoder.decode(Data(line.utf8))
+        guard case .toolResult(let results, _) = event else {
+            return XCTFail("expected toolResult, got \(event)")
+        }
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].toolUseResult?["task"]?["id"]?.stringValue, "1")
+        XCTAssertEqual(results[0].toolUseResult?["task"]?["subject"]?.stringValue,
+                       "Alpha task")
+    }
+
+    func testToolUseResultOnlyAttachesToSingleResultLines() throws {
+        // Two tool_result blocks + one line-level tool_use_result is ambiguous;
+        // the decoder must drop it rather than guess (probe finding 10).
+        let line = ##"{"type":"user","message":{"role":"user","content":[{"tool_use_id":"a","type":"tool_result","content":"one"},{"tool_use_id":"b","type":"tool_result","content":"two"}]},"tool_use_result":{"task":{"id":"1"}}}"##
+        let event = try AgentEventDecoder.decode(Data(line.utf8))
+        guard case .toolResult(let results, _) = event else {
+            return XCTFail("expected toolResult, got \(event)")
+        }
+        XCTAssertEqual(results.count, 2)
+        XCTAssertTrue(results.allSatisfy { $0.toolUseResult == nil })
+    }
+
+    func testControlErrorAckCarriesMessage() throws {
+        let line = ##"{"type":"control_response","response":{"subtype":"error","request_id":"badmodel-1","error":"Model \"totally-bogus-model-9000\" is not a recognized model id. Run /model to see available models."}}"##
+        let event = try AgentEventDecoder.decode(Data(line.utf8))
+        guard case .controlResponse(let envelope) = event else {
+            return XCTFail("expected controlResponse, got \(event)")
+        }
+        XCTAssertEqual(envelope.subtype, "error")
+        XCTAssertEqual(envelope.requestID, "badmodel-1")
+        XCTAssertEqual(envelope.errorMessage,
+                       #"Model "totally-bogus-model-9000" is not a recognized model id. Run /model to see available models."#)
+    }
+
+    func testSuccessAckHasNoErrorMessage() throws {
+        let line = ##"{"type":"control_response","response":{"subtype":"success","request_id":"ok-1","response":{"mode":"plan"}}}"##
+        let event = try AgentEventDecoder.decode(Data(line.utf8))
+        guard case .controlResponse(let envelope) = event else {
+            return XCTFail("expected controlResponse, got \(event)")
+        }
+        XCTAssertNil(envelope.errorMessage)
+        XCTAssertEqual(envelope.payload?["mode"]?.stringValue, "plan")
+    }
 }

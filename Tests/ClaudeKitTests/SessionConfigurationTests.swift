@@ -127,4 +127,17 @@ final class SessionConfigurationTests: XCTestCase {
         XCTAssertTrue(args.contains("--fork-session"))
         XCTAssertEqual(args[args.firstIndex(of: "--permission-mode")! + 1], "acceptEdits")
     }
+
+    func testEffortArgument() {
+        var configuration = SessionConfiguration(
+            workingDirectory: URL(fileURLWithPath: "/tmp"))
+        XCTAssertFalse(configuration.arguments().contains("--effort"),
+                       "nil effort adds no flag")
+        configuration.effort = "medium"
+        let args = configuration.arguments()
+        guard let index = args.firstIndex(of: "--effort") else {
+            return XCTFail("--effort missing from \(args)")
+        }
+        XCTAssertEqual(args[args.index(after: index)], "medium")
+    }
 }
