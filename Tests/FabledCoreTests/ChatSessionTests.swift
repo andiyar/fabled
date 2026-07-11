@@ -469,4 +469,74 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertEqual(session.sessionTasks[0].taskID, "1")
         XCTAssertEqual(session.sessionTasks[0].subject, "Alpha task")
     }
+
+    // MARK: - Control-op ack correlation + liveness (4b T6)
+
+    func testRejectedSetModelRevertsAndNotices() async throws {
+        let (session, continuation, recorder) = makeSession()
+        // Session knows its model (catalog default path).
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"commands":[],"models":[{"value":"default","resolvedModel":"claude-opus-4-8","displayName":"Default"}]}}}
+        """#)
+        await waitUntil("ready") { session.isReady }
+        XCTAssertEqual(session.currentModel, "claude-opus-4-8")
+        session.setModel("totally-bogus-model-9000")
+        XCTAssertEqual(session.currentModel, "totally-bogus-model-9000",
+                       "optimistic until the ack")
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .setModel(_, let requestID) = entries.first else {
+            return XCTFail("expected setModel, got \(entries)")
+        }
+        // The revert registration hops through the sending Task's MainActor
+        // resume — the ack must not be handled before it lands.
+        try await Task.sleep(for: .milliseconds(20))
+        // Error ack with the recorded request id (badmodel fixture shape).
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"error","request_id":"\#(requestID)","error":"Model \"totally-bogus-model-9000\" is not a recognized model id."}}
+        """#)
+        await waitUntil("revert") { session.currentModel == "claude-opus-4-8" }
+        XCTAssertTrue(session.timeline.contains {
+            if case .notice(_, let text) = $0 { return text.contains("not a recognized") }
+            return false
+        }, "the rejection reason surfaces as a notice")
+    }
+
+    func testRejectedSetPermissionModeReverts() async throws {
+        let (session, continuation, recorder) = makeSession()
+        session.setPermissionMode("plan")
+        XCTAssertEqual(session.permissionMode, "plan")
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .setPermissionMode(_, let requestID) = entries.first else {
+            return XCTFail("expected setPermissionMode, got \(entries)")
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"error","request_id":"\#(requestID)","error":"nope"}}
+        """#)
+        await waitUntil("revert") { session.permissionMode == "default" }
+    }
+
+    func testSuccessAckKeepsOptimisticValue() async throws {
+        let (session, continuation, recorder) = makeSession()
+        session.setModel("haiku")
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .setModel(_, let requestID) = entries.first else {
+            return XCTFail("expected setModel, got \(entries)")
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"\#(requestID)","response":{}}}
+        """#)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(session.currentModel, "haiku")
+    }
+
+    func testLastEventAtTracksWireActivity() async throws {
+        let (session, continuation, _) = makeSession()
+        XCTAssertNil(session.lastEventAt)
+        try yield(continuation, #"""
+        {"type":"system","subtype":"status","status":"requesting","uuid":"s1","session_id":"s"}
+        """#)
+        await waitUntil("stamp") { session.lastEventAt != nil }
+    }
 }

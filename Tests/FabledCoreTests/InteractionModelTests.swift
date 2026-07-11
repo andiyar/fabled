@@ -105,4 +105,40 @@ final class InteractionModelTests: XCTestCase {
         XCTAssertEqual(ToolCallSummary.summarize(name: "TodoWrite", input: todos),
                        "1/2 done")
     }
+
+    // MARK: - Gate summary lines (4b T6; consumed by sidebar rows + welcome inbox)
+
+    private func permissionRequest(_ json: String) throws -> PermissionRequest {
+        let event = try AgentEventDecoder.decode(Data(json.utf8))
+        guard case .controlRequest(let request) = event,
+              let permission = PermissionRequest(request) else {
+            fatalError("fixture shape drifted")
+        }
+        return permission
+    }
+
+    func testPermissionGateSummaryLine() throws {
+        let request = try permissionRequest(#"""
+        {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"rm -rf build"}}}
+        """#)
+        XCTAssertEqual(InteractionGate.permission(request).summaryLine,
+                       "Approve: rm -rf build")
+    }
+
+    func testQuestionGateSummaryLine() throws {
+        let request = try permissionRequest(#"""
+        {"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","requires_user_interaction":true,"input":{"questions":[{"question":"Ship size?","header":"Size","options":[{"label":"S","description":""},{"label":"L","description":""}],"multiSelect":false}]}}}
+        """#)
+        let prompt = QuestionPrompt(request)!
+        XCTAssertEqual(InteractionGate.question(prompt).summaryLine, "Ship size?")
+    }
+
+    func testPlanGateSummaryLine() throws {
+        let request = try permissionRequest(#"""
+        {"type":"control_request","request_id":"e1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","requires_user_interaction":true,"input":{"plan":"# Build the thing\n- step"}}}
+        """#)
+        let approval = PlanApproval(request)!
+        XCTAssertEqual(InteractionGate.planApproval(approval).summaryLine,
+                       "Plan ready for review")
+    }
 }

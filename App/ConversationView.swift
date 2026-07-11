@@ -51,15 +51,6 @@ struct ConversationView: View {
         return current
     }
 
-    /// Ticker text under the stream: token count when the CLI reports it
-    /// (system/thinking_tokens, probe finding 7).
-    private var thinkingLabel: String {
-        if let tokens = session.thinkingTokens, tokens > 0 {
-            return "Thinking… ~\(tokens) tokens"
-        }
-        return "Thinking…"
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             if let note = session.versionNote {
@@ -96,14 +87,8 @@ struct ConversationView: View {
                         ForEach(session.timeline) { item in
                             TimelineItemView(item: item, session: session)
                         }
-                        if session.isThinking {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text(thinkingLabel)
-                                    .font(Theme.assistantFont(.callout)).italic()
-                                    .foregroundStyle(.secondary)
-                                    .contentTransition(.numericText())
-                            }
+                        if session.isWorking {
+                            StreamStatusRow(session: session)
                         }
                     }
                     .padding()
@@ -198,5 +183,41 @@ struct ConversationView: View {
                 .keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
+    }
+}
+
+/// Under-stream status line: thinking ticker while deltas flow, and a
+/// client-timed liveness note when the wire goes quiet mid-turn (there is
+/// no heartbeat during tool execution — 4a probe finding 8; the opus-outage
+/// gate feedback is why silence must be labeled).
+private struct StreamStatusRow: View {
+    let session: ChatSession
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(label(now: context.date))
+                    .font(Theme.assistantFont(.callout)).italic()
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
+        }
+    }
+
+    private func label(now: Date) -> String {
+        if session.isThinking {
+            if let tokens = session.thinkingTokens, tokens > 0 {
+                return "Thinking… ~\(tokens) tokens"
+            }
+            return "Thinking…"
+        }
+        if let last = session.lastEventAt {
+            let quiet = Int(now.timeIntervalSince(last))
+            if quiet >= 20 {
+                return "Still working — no response for \(quiet)s…"
+            }
+        }
+        return "Working…"
     }
 }

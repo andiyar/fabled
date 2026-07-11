@@ -52,6 +52,13 @@ public final class ChatSession: Identifiable {
     /// control_response) or sent `system init` — the child is alive and
     /// talking, even though 2.1.205+ holds init until the first user turn.
     public private(set) var isReady = false
+    /// Wall-clock of the last wire event — liveness is client-timed, there
+    /// is no heartbeat during tool execution (4a probe finding 8).
+    public private(set) var lastEventAt: Date?
+    /// In-flight optimistic control ops: request id → revert closure.
+    /// A rejected op runs its revert so the toolbar can't hold a stale label
+    /// (FOLLOWUPS: optimistic control ops).
+    private var pendingControlReverts: [String: () -> Void] = [:]
 
     private let connection: AgentConnection
     private var consumeTask: Task<Void, Never>?
@@ -204,14 +211,32 @@ public final class ChatSession: Identifiable {
     }
 
     public func setModel(_ value: String) {
+        let previous = currentModel
+        let previousChosen = modelExplicitlyChosen
         currentModel = value
         modelExplicitlyChosen = true
-        Task { await connection.setModel(value) }
+        Task {
+            let requestID = await connection.setModel(value)
+            registerRevert(requestID) { [weak self] in
+                self?.currentModel = previous
+                self?.modelExplicitlyChosen = previousChosen
+            }
+        }
     }
 
     public func setPermissionMode(_ mode: String) {
+        let previous = permissionMode
         permissionMode = mode
-        Task { await connection.setPermissionMode(mode) }
+        Task {
+            let requestID = await connection.setPermissionMode(mode)
+            registerRevert(requestID) { [weak self] in
+                self?.permissionMode = previous
+            }
+        }
+    }
+
+    private func registerRevert(_ requestID: String, _ revert: @escaping () -> Void) {
+        pendingControlReverts[requestID] = revert
     }
 
     /// Sends the CLI's own /effort command as user text (probe finding 2):
@@ -265,6 +290,7 @@ public final class ChatSession: Identifiable {
         subsystem: "dev.fabled.Fabled", category: "protocol")
 
     private func handle(_ event: AgentEvent) {
+        lastEventAt = Date()
         let tag = Mirror(reflecting: event).children.first?.label ?? "terminated"
         Self.wireLog.debug("event \(tag, privacy: .public) [\(self.id, privacy: .public)]")
         // Subagent side-streams: same vocabulary, separate timeline. Routed
@@ -291,6 +317,19 @@ public final class ChatSession: Identifiable {
             where envelope.requestID == AgentSession.initializeRequestID:
             isReady = true
             harvestCatalog(envelope.payload)
+        case .controlResponse(let envelope):
+            // Correlate a control op's ack: a rejected set_model/
+            // set_permission_mode runs its revert so the toolbar can't hold a
+            // stale label; the reason surfaces as a notice. Success acks just
+            // clear the pending revert entry.
+            if let revert = pendingControlReverts.removeValue(forKey: envelope.requestID) {
+                if envelope.subtype == "error" {
+                    revert()
+                    let reason = envelope.errorMessage ?? "The CLI rejected the change."
+                    timeline = timeline + [.notice(
+                        id: "control-error-\(envelope.requestID)", text: reason)]
+                }
+            }
         case .controlRequest(let request):
             if let permission = PermissionRequest(request) {
                 if let question = QuestionPrompt(permission) {
