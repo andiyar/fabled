@@ -3,14 +3,17 @@ import FabledCore
 
 struct ConversationView: View {
     let session: ChatSession
+    /// Hoisted to RootView so an open inspector survives per-session hierarchy
+    /// recreation (the deliberate T6 behavior). Owned there, bound here.
+    @Binding var isInspectorPresented: Bool
     @State private var inspectedID: String?
-    @State private var isInspectorPresented = false
     /// Navigation trail of previously inspected ids: any click that switches
     /// the panel to a different item pushes the old one, and the panel's Back
     /// button pops it (drill-down into subagent sub-rows is the motivating
     /// case — Ben, 2026-07-10 live smoke — but the trail is deliberately
     /// browser-like across plain row clicks too).
     @State private var inspectBackStack: [String] = []
+    @State private var expandedGroups: Set<String> = []
 
     /// Resolves the inspected id against the main timeline and all subagent
     /// sub-timelines (sub rows are inspectable too — Task 11).
@@ -84,16 +87,27 @@ struct ConversationView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 48)
                         }
-                        ForEach(session.timeline) { item in
-                            TimelineItemView(item: item, session: session)
-                        }
-                        if session.isThinking {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text("Thinking…")
-                                    .font(Theme.assistantFont(.callout)).italic()
-                                    .foregroundStyle(.secondary)
+                        ForEach(TimelineDisplay.grouped(session.timeline)) { row in
+                            switch row {
+                            case .item(let item):
+                                TimelineItemView(item: item,
+                                                 subagentSteps: item.toolCallID
+                                                     .flatMap { session.subagentTimelines[$0]?.count })
+                            case .toolGroup(let id, let items, let summary):
+                                ToolGroupRow(
+                                    id: id, items: items, summary: summary,
+                                    isExpanded: expandedGroups.contains(id),
+                                    toggle: {
+                                        if expandedGroups.contains(id) {
+                                            expandedGroups.remove(id)
+                                        } else {
+                                            expandedGroups.insert(id)
+                                        }
+                                    })
                             }
+                        }
+                        if session.isWorking {
+                            StreamStatusRow(session: session)
                         }
                     }
                     .padding()
@@ -103,12 +117,11 @@ struct ConversationView: View {
                 }
                 .defaultScrollAnchor(.bottom)
             }
-            if !session.todos.isEmpty {
-                TodoChecklistView(todos: session.todos)
-                    // Session-scoped identity: RootView reuses this view across
-                    // live-session switches, so without it the collapse @State
-                    // leaks between sessions (T10 quality review).
-                    .id(session.id)
+            let checklistRows = session.sessionTasks.isEmpty
+                ? session.todos.map(\.checklistRow)
+                : session.sessionTasks.map(\.checklistRow)
+            if !checklistRows.isEmpty {
+                TodoChecklistView(rows: checklistRows)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
                     .frame(maxWidth: Theme.contentMaxWidth)
@@ -141,15 +154,6 @@ struct ConversationView: View {
         .onChange(of: inspectedID) { _, new in
             if new == nil { inspectBackStack.removeAll() }
         }
-        // RootView reuses this view across live-session switches (FOLLOWUPS
-        // reuse rider), so session-scoped selection state must reset by hand:
-        // timeline ids are only unique within a session (reducer fallback ids
-        // like "turn-N" collide across sessions), and a stale trail would walk
-        // Back into another session's items.
-        .onChange(of: session.id) { _, _ in
-            inspectedID = nil
-            inspectBackStack.removeAll()
-        }
         .toolbar {
             ToolbarItemGroup {
                 if session.currentModel != nil {
@@ -160,6 +164,7 @@ struct ConversationView: View {
                         .help("Active model")
                 }
                 ModelPickerMenu(session: session)
+                EffortPickerMenu(session: session)
                 Picker("Permissions", selection: Binding(
                     get: { session.permissionMode },
                     set: { session.setPermissionMode($0) }
@@ -184,5 +189,41 @@ struct ConversationView: View {
                 .keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
+    }
+}
+
+/// Under-stream status line: thinking ticker while deltas flow, and a
+/// client-timed liveness note when the wire goes quiet mid-turn (there is
+/// no heartbeat during tool execution — 4a probe finding 8; the opus-outage
+/// gate feedback is why silence must be labeled).
+private struct StreamStatusRow: View {
+    let session: ChatSession
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(label(now: context.date))
+                    .font(Theme.assistantFont(.callout)).italic()
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
+        }
+    }
+
+    private func label(now: Date) -> String {
+        if session.isThinking {
+            if let tokens = session.thinkingTokens, tokens > 0 {
+                return "Thinking… ~\(tokens) tokens"
+            }
+            return "Thinking…"
+        }
+        if let last = session.lastEventAt {
+            let quiet = Int(now.timeIntervalSince(last))
+            if quiet >= 20 {
+                return "Still working — no response for \(quiet)s…"
+            }
+        }
+        return "Working…"
     }
 }

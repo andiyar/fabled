@@ -71,23 +71,26 @@ public enum TimelineReducer {
     }
 
     /// Read-only history: an on-disk transcript rendered through the same
-    /// vocabulary. Main-chain only — sidechain (subagent) traffic, titles,
-    /// and bookkeeping lines are not conversation.
-    public static func items(fromTranscript entries: [TranscriptEntry]) -> [TimelineItem] {
+    /// vocabulary. Main-chain only by default — sidechain (subagent) traffic,
+    /// titles, and bookkeeping lines are not conversation. `allowSidechain`
+    /// flips the two sidechain guards for subagent replay, where the agent's
+    /// OWN sidechain lines ARE its conversation (4b Task 14 drill-down).
+    public static func items(fromTranscript entries: [TranscriptEntry],
+                             allowSidechain: Bool = false) -> [TimelineItem] {
         var items: [TimelineItem] = []
         var lineIndex = 0
         for entry in entries {
             lineIndex += 1
             switch entry {
             case .userPrompt(let text, let context, _):
-                guard !context.isSidechain, !context.isMeta else { continue }
+                guard allowSidechain || !context.isSidechain, !context.isMeta else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 // Machine-generated prompts (<command-name>…, caveats) are
                 // not conversation; same rule as title derivation.
                 guard !trimmed.isEmpty, !trimmed.hasPrefix("<") else { continue }
                 items = appendUserMessage(items, id: context.uuid ?? "line-\(lineIndex)", text: text)
             case .event(let event, let context):
-                guard !context.isSidechain else { continue }
+                guard allowSidechain || !context.isSidechain else { continue }
                 items = reduce(items, event)
             case .title, .summary, .queueOperation, .attachment, .sessionMeta, .unknown:
                 continue
@@ -111,9 +114,18 @@ public enum TimelineReducer {
                     id: stream.uuid ?? "stream-\(items.count)",
                     markdown: text, isStreaming: true))
             }
-        case .messageStart, .contentBlockStart, .thinkingDelta, .inputJSONDelta,
+        case .thinkingDelta(_, let thinking):
+            if case .thinking(let id, let text, true) = items.last {
+                items[items.count - 1] = .thinking(
+                    id: id, text: text + thinking, isStreaming: true)
+            } else {
+                items.append(.thinking(
+                    id: stream.uuid ?? "thinking-\(items.count)",
+                    text: thinking, isStreaming: true))
+            }
+        case .messageStart, .contentBlockStart, .inputJSONDelta,
              .contentBlockStop, .messageDelta, .messageStop, .other:
-            break  // thinking state lives on ChatSession; partial tool input is Plan 4.
+            break  // partial tool input is Plan 4.
         }
     }
 
@@ -122,6 +134,7 @@ public enum TimelineReducer {
     private static func reduceAssistant(_ items: inout [TimelineItem], _ message: AssistantMessage) {
         let baseID = message.raw["uuid"]?.stringValue ?? "assistant-\(items.count)"
         var textIndex = 0
+        var thinkIndex = 0
         for block in message.content {
             switch block {
             case .text(let text):
@@ -130,7 +143,11 @@ public enum TimelineReducer {
                 textIndex += 1
             case .toolUse(let id, let name, let input):
                 upsertToolCall(&items, id: id, name: name, input: input)
-            case .thinking, .unknown:
+            case .thinking(let text):
+                guard !text.isEmpty else { break }
+                finalizeThinking(&items, text: text, fallbackID: "\(baseID)-think-\(thinkIndex)")
+                thinkIndex += 1
+            case .unknown:
                 break
             }
         }
@@ -146,12 +163,32 @@ public enum TimelineReducer {
         }
     }
 
+    /// The final assistant message's thinking block replaces the streamed
+    /// provisional item in place (same id — SwiftUI update, not remove+insert);
+    /// on replay, where nothing streamed, it appends finalized.
+    private static func finalizeThinking(_ items: inout [TimelineItem], text: String, fallbackID: String) {
+        if case .thinking(let id, _, true) = items.last {
+            items[items.count - 1] = .thinking(id: id, text: text, isStreaming: false)
+        } else {
+            items.append(.thinking(id: fallbackID, text: text, isStreaming: false))
+        }
+    }
+
     /// A turn that ends without a finalizing assistant message (interrupt,
-    /// error mid-stream) must not leave a streaming item for the next
-    /// turn's deltas to coalesce onto.
+    /// error mid-stream) must not leave streaming items for later deltas to
+    /// coalesce onto. Sweeps the whole array — a thinking item can be stranded
+    /// non-last when text deltas started after it (thinking → text →
+    /// interrupt-before-assistant-event).
     private static func finalizeDanglingStreamText(_ items: inout [TimelineItem]) {
-        if case .assistantText(let id, let markdown, true) = items.last {
-            items[items.count - 1] = .assistantText(id: id, markdown: markdown, isStreaming: false)
+        for index in items.indices {
+            switch items[index] {
+            case .assistantText(let id, let markdown, true):
+                items[index] = .assistantText(id: id, markdown: markdown, isStreaming: false)
+            case .thinking(let id, let text, true):
+                items[index] = .thinking(id: id, text: text, isStreaming: false)
+            default:
+                break
+            }
         }
     }
 

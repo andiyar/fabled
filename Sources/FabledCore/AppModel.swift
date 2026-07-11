@@ -9,6 +9,12 @@ import Observation
 public final class AppModel {
     public let store: SessionStore
     public let index: SearchIndex
+    private let defaults: UserDefaults
+
+    /// AppKit-side seams: is the app frontmost, and post a notification.
+    /// Injected by the app target at startup (FabledCore cannot import AppKit).
+    public var isAppActive: () -> Bool = { true }
+    public var postNotification: (LocalNotification) -> Void = { _ in }
 
     public private(set) var liveSessions: [ChatSession] = []
     public private(set) var history: [ProjectHistory] = []
@@ -19,6 +25,26 @@ public final class AppModel {
     /// The New Session folder picker (menu ⌘N, welcome button) presents
     /// when this flips true; RootView owns the fileImporter.
     public var isPickingFolder = false
+    /// Effort applied to every new spawn via --effort (what Claude Desktop
+    /// does). Persisted; nil = CLI default. Session-scoped changes go through
+    /// ChatSession.setEffort and don't touch this.
+    public var preferredEffort: String? {
+        didSet {
+            defaults.set(preferredEffort, forKey: Self.preferredEffortKey)
+        }
+    }
+    private static let preferredEffortKey = "preferredEffort"
+
+    /// Sidebar organization (feature 18). Persisted as JSON.
+    public var sidebarOptions = SidebarOptions() {
+        didSet {
+            guard sidebarOptions != oldValue else { return }
+            if let data = try? JSONEncoder().encode(sidebarOptions) {
+                defaults.set(data, forKey: Self.sidebarOptionsKey)
+            }
+        }
+    }
+    private static let sidebarOptionsKey = "sidebarOptions"
     public var searchQuery = "" {
         didSet { if searchQuery != oldValue { scheduleSearch() } }
     }
@@ -37,13 +63,20 @@ public final class AppModel {
     private var watchTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
 
-    public init(store: SessionStore = SessionStore(), databaseURL: URL? = nil) throws {
+    public init(store: SessionStore = SessionStore(), databaseURL: URL? = nil,
+                defaults: UserDefaults = .standard) throws {
         self.store = store
+        self.defaults = defaults
         let dbURL = databaseURL
             ?? FileManager.default.urls(for: .applicationSupportDirectory,
                                         in: .userDomainMask)[0]
                 .appendingPathComponent("Fabled/index.sqlite")
         self.index = try SearchIndex(databaseURL: dbURL, store: store)
+        self.preferredEffort = defaults.string(forKey: Self.preferredEffortKey)
+        if let data = defaults.data(forKey: Self.sidebarOptionsKey),
+           let options = try? JSONDecoder().decode(SidebarOptions.self, from: data) {
+            self.sidebarOptions = options
+        }
     }
 
     // No deinit: Swift 6.0 forbids a nonisolated deinit from touching the
@@ -81,8 +114,23 @@ public final class AppModel {
         await refreshHistory()
     }
 
+    /// Sidebar sections under the user's organization options.
+    public var sidebarSections: [SidebarSection] {
+        SidebarOrganizer.organize(allSummaries, options: sidebarOptions, now: Date())
+    }
+    private var allSummaries: [SessionSummary] = []
+
+    public func togglePin(_ sessionID: String) {
+        if sidebarOptions.pinnedSessionIDs.contains(sessionID) {
+            sidebarOptions.pinnedSessionIDs.remove(sessionID)
+        } else {
+            sidebarOptions.pinnedSessionIDs.insert(sessionID)
+        }
+    }
+
     public func refreshHistory() async {
         guard let summaries = try? await index.sessionSummaries() else { return }
+        allSummaries = summaries
         var groups: [String: ProjectHistory] = [:]
         var order: [String] = []   // projects ordered by their newest session
         for summary in summaries {
@@ -105,6 +153,33 @@ public final class AppModel {
         return searchHits.first { $0.session.id == id }?.session
     }
 
+    /// Welcome inbox recents: newest sessions across ALL projects (the
+    /// sidebar groups; the welcome screen interleaves), excluding sessions
+    /// currently attached to a live ChatSession (those render in the live
+    /// sections above).
+    public func welcomeRecents(limit: Int) -> [SessionSummary] {
+        // Resumed OR fresh: a fresh session's own transcript is indexed while
+        // it runs (watcher reindex), and it already renders in the live
+        // sections above — it must not double up here.
+        let liveIDs = Set(liveSessions.compactMap(\.resumedSessionID))
+            .union(liveSessions.compactMap(\.info?.sessionID))
+        var seen = Set<String>()
+        var result: [SessionSummary] = []
+        for group in history {
+            for summary in group.sessions where !liveIDs.contains(summary.id) {
+                if seen.insert(summary.id).inserted { result.append(summary) }
+            }
+        }
+        result.sort { $0.lastActivity > $1.lastActivity }
+        return Array(result.prefix(limit))
+    }
+
+    /// Composer project chip: recent projects, newest-session first
+    /// (history is already ordered that way).
+    public func recentProjects(limit: Int) -> [ProjectFolder] {
+        Array(history.map(\.project).prefix(limit))
+    }
+
     // MARK: - Search
 
     private func scheduleSearch() {
@@ -125,20 +200,60 @@ public final class AppModel {
 
     // MARK: - Session lifecycle
 
-    public func newSession(at directory: URL, model: String? = nil) async {
+    public func newSession(at directory: URL, model: String? = nil,
+                           firstMessage: String? = nil) async {
         var configuration = SessionConfiguration(workingDirectory: directory)
         configuration.model = model
+        configuration.effort = preferredEffort
         await launch(configuration, seed: [])
+        if let firstMessage, case .live(let id) = selection,
+           let session = liveSessions.first(where: { $0.id == id }) {
+            session.send(firstMessage)
+        }
     }
 
+    /// Continues in flight: the collision guard checks liveSessions, but the
+    /// session lands there only after two awaits — without this set, a rapid
+    /// double-Continue passes the guard twice and spawns two processes on one
+    /// session id (T12 quality review).
+    private var resumingSessionIDs: Set<String> = []
+
     /// Resume/fork replays nothing on the wire (probe finding 8) — the
-    /// timeline is seeded from the on-disk transcript.
+    /// timeline is seeded from the on-disk transcript. Continue reattaches
+    /// the SAME session id, so a second live process on that id is forbidden
+    /// (one-process invariant): an existing attachment is selected instead.
+    /// The guard matches resumed OR fresh — a fresh session's own transcript
+    /// is indexed while it runs, so Continue on its history row must select
+    /// the live process, not spawn a second one on the same id.
     public func resume(_ summary: SessionSummary, fork: Bool) async {
-        let seed = await historicalTimeline(for: summary)
-        var configuration = SessionConfiguration(
-            workingDirectory: workingDirectory(for: summary))
+        if !fork, let existing = liveSessions.first(
+            where: { $0.resumedSessionID == summary.id
+                || $0.info?.sessionID == summary.id }) {
+            selection = .live(existing.id)
+            return
+        }
+        // Forks deliberately unguarded — each fork is a new identity, so a
+        // double-click forking twice is benign.
+        if !fork {
+            guard !resumingSessionIDs.contains(summary.id) else { return }
+            resumingSessionIDs.insert(summary.id)
+        }
+        defer { if !fork { resumingSessionIDs.remove(summary.id) } }
+        var seed = await historicalTimeline(for: summary)
+        let resolved = resolveWorkingDirectory(for: summary)
+        if fork {
+            seed = [.notice(id: "fork-origin",
+                            text: "Forked from “\(summary.title)” — this is a new session id.")]
+                + seed
+        }
+        if resolved.didFallBack {
+            seed = seed + [.notice(id: "cwd-fallback",
+                                   text: "Original folder \(summary.project.originalPath) no longer exists — running in your home folder instead.")]
+        }
+        var configuration = SessionConfiguration(workingDirectory: resolved.url)
         configuration.resumeSessionID = summary.id
         configuration.forkSession = fork
+        configuration.effort = preferredEffort
         await launch(configuration, seed: seed)
     }
 
@@ -153,9 +268,33 @@ public final class AppModel {
         if selection == .live(session.id) { selection = nil }
     }
 
+    /// Notification click: focus the session (feature 7).
+    public func focusSession(id: UUID) {
+        guard liveSessions.contains(where: { $0.id == id }) else { return }
+        selection = .live(id)
+    }
+
+    /// Test seam: registers a live session without spawning a process.
+    public func adoptForTesting(_ session: ChatSession) {
+        liveSessions.append(session)
+    }
+
     public func historicalTimeline(for summary: SessionSummary) async -> [TimelineItem] {
         let entries = (try? await store.transcript(for: summary)) ?? []
         return TimelineReducer.items(fromTranscript: entries)
+    }
+
+    /// Subagent drill-down data for a HISTORICAL session — the on-disk
+    /// analog of ChatSession.subagentTimelines (feature 15 as rescoped).
+    /// Keyed by the parent's Task tool_use id; each value is that agent's own
+    /// timeline (sidechain lines included — they ARE its conversation).
+    public func historicalSubagentTimelines(
+        for summary: SessionSummary
+    ) async -> [String: [TimelineItem]] {
+        let transcripts = (try? await store.subagentTranscripts(for: summary)) ?? [:]
+        return transcripts.mapValues {
+            TimelineReducer.items(fromTranscript: $0, allowSidechain: true)
+        }
     }
 
     private func launch(_ configuration: SessionConfiguration, seed: [TimelineItem]) async {
@@ -163,6 +302,15 @@ public final class AppModel {
             let session = try await ChatSession.launch(configuration: configuration)
             session.seed(timeline: seed)
             liveSessions.append(session)
+            session.onNoteworthy = { [weak self, weak session] event in
+                guard let self, let session else { return }
+                let selected = self.selection == .live(session.id)
+                if let note = NotificationPolicy.decide(
+                    event, sessionTitle: session.title, sessionID: session.id,
+                    isAppActive: self.isAppActive(), isSessionSelected: selected) {
+                    self.postNotification(note)
+                }
+            }
             selection = .live(session.id)
             launchError = nil
         } catch {
@@ -170,13 +318,17 @@ public final class AppModel {
         }
     }
 
-    private func workingDirectory(for summary: SessionSummary) -> URL {
+    /// Resolves a summary's original cwd; falls back to $HOME when the
+    /// project folder no longer exists — and SAYS so (feature 16 rider:
+    /// the fallback used to be silent).
+    public func resolveWorkingDirectory(for summary: SessionSummary)
+        -> (url: URL, didFallBack: Bool) {
         let path = summary.project.originalPath
-        // Unresolvable flattened names (deleted directories) fall back to home.
-        guard path.hasPrefix("/") else {
-            return FileManager.default.homeDirectoryForCurrentUser
+        guard path.hasPrefix("/"),
+              FileManager.default.fileExists(atPath: path) else {
+            return (FileManager.default.homeDirectoryForCurrentUser, true)
         }
-        return URL(fileURLWithPath: path)
+        return (URL(fileURLWithPath: path), false)
     }
 }
 

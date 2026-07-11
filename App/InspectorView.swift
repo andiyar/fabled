@@ -45,8 +45,9 @@ struct InspectorPanel: View {
     /// panel to a sub item (T12 gate). Do not rely on inheritance for this.
     let inspectItem: InspectItemAction?
     @Binding var inspectedID: String?
-    /// Pops the drill-down trail (Task detail → sub-row → back). nil hides the
-    /// button — historical sessions have no drill-down, so no trail.
+    /// Pops the drill-down trail (Task detail → sub-row → back). nil hides
+    /// the button — both containers pass it since T14 gave historical
+    /// sessions on-disk subagent drill-down; nil now just means "trail empty".
     var onBack: (() -> Void)? = nil
 
     var body: some View {
@@ -104,6 +105,15 @@ struct InspectorPanel: View {
         case .raw(_, let type, let raw):
             sectionHeader(type, systemImage: "questionmark.square.dashed")
             monospacedBlock(JSONPretty.string(raw))
+        case .thinking(_, let text, _):
+            sectionHeader("Thinking", systemImage: "sparkle")
+            // Same cap as monospacedBlock — the inspector must not hang the
+            // window on a pathological payload.
+            Text(String(text.prefix(200_000)))
+                .font(Theme.assistantFont(.callout)).italic()
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         default:
             // Other item kinds are fully visible inline; nothing deeper to show.
             Text("No additional detail for this item.")
@@ -142,7 +152,7 @@ struct InspectorPanel: View {
                 // too — the container's inspectedItem lookup already searches
                 // sub-timelines.
                 ForEach(sub) { item in
-                    TimelineItemView(item: item, session: nil)
+                    TimelineItemView(item: item)
                 }
             }
         }

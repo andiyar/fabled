@@ -1,17 +1,43 @@
 import SwiftUI
 import FabledCore
 
-/// Pinned progress card for the session's TodoWrite list. Auto-collapses
-/// once every item completes; the header always toggles manually.
+/// One renderable checklist row — TodoItem (legacy TodoWrite) and TaskItem
+/// (task tools) both map here.
+struct ChecklistRow: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let detail: String?
+    let status: TodoItem.Status
+}
+
+extension TodoItem {
+    var checklistRow: ChecklistRow {
+        ChecklistRow(id: content, title: content,
+                     detail: status == .inProgress ? activeForm : nil,
+                     status: status)
+    }
+}
+
+extension TaskItem {
+    var checklistRow: ChecklistRow {
+        ChecklistRow(id: id, title: subject,
+                     detail: status == .inProgress ? activeForm : nil,
+                     status: status)
+    }
+}
+
+/// Pinned progress card for the session's checklist (task tools, or legacy
+/// TodoWrite). Auto-collapses once every item completes; the header always
+/// toggles manually (sticky preference — T10 decision).
 struct TodoChecklistView: View {
-    let todos: [TodoItem]
+    let rows: [ChecklistRow]
     /// nil = follow auto behavior (open while work remains).
     @State private var userCollapsed: Bool?
 
-    private var allDone: Bool { todos.allSatisfy { $0.status == .completed } }
+    private var allDone: Bool { rows.allSatisfy { $0.status == .completed } }
     private var isCollapsed: Bool { userCollapsed ?? allDone }
-    private var doneCount: Int { todos.count { $0.status == .completed } }
-    private var current: TodoItem? { todos.first { $0.status == .inProgress } }
+    private var doneCount: Int { rows.count { $0.status == .completed } }
+    private var current: ChecklistRow? { rows.first { $0.status == .inProgress } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -22,10 +48,10 @@ struct TodoChecklistView: View {
                     Image(systemName: allDone
                         ? "checklist.checked" : "checklist")
                         .foregroundStyle(allDone ? Color.green : Theme.clay)
-                    Text("\(doneCount)/\(todos.count)")
+                    Text("\(doneCount)/\(rows.count)")
                         .font(.caption.monospacedDigit()).fontWeight(.semibold)
                     if isCollapsed, let current {
-                        Text(current.activeForm)
+                        Text(current.detail ?? current.title)
                             .font(.caption).italic()
                             .foregroundStyle(.secondary).lineLimit(1)
                     }
@@ -37,17 +63,17 @@ struct TodoChecklistView: View {
             }
             .buttonStyle(.plain)
             if !isCollapsed {
-                // Offset-keyed: TodoItem.id is content, which the CLI does
-                // not guarantee unique (T3 review note).
-                ForEach(Array(todos.enumerated()), id: \.offset) { _, todo in
+                // Offset-keyed: legacy TodoItem ids are content strings, which
+                // the CLI does not guarantee unique (T3 review note).
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        icon(for: todo.status)
-                        Text(todo.status == .inProgress ? todo.activeForm : todo.content)
+                        icon(for: row.status)
+                        Text(row.status == .inProgress ? (row.detail ?? row.title) : row.title)
                             .font(.caption)
-                            .italic(todo.status == .inProgress)
-                            .foregroundStyle(todo.status == .completed
+                            .italic(row.status == .inProgress)
+                            .foregroundStyle(row.status == .completed
                                 ? Color.secondary : Color.primary)
-                            .strikethrough(todo.status == .completed,
+                            .strikethrough(row.status == .completed,
                                            color: .secondary)
                     }
                 }

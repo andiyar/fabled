@@ -36,8 +36,8 @@ actor OutboundRecorder {
         case respond(requestID: String, behavior: String, updatedInput: JSONValue?,
                      message: String?)
         case interrupt
-        case setModel(String)
-        case setPermissionMode(String)
+        case setModel(String, requestID: String)
+        case setPermissionMode(String, requestID: String)
         case terminate
     }
     private(set) var entries: [Entry] = []
@@ -64,8 +64,16 @@ func makeFakeConnection()
             }
         },
         interrupt: { await recorder.record(.interrupt) },
-        setModel: { await recorder.record(.setModel($0)) },
-        setPermissionMode: { await recorder.record(.setPermissionMode($0)) },
+        setModel: { model in
+            let id = "req-\(UUID().uuidString.prefix(8))"
+            await recorder.record(.setModel(model, requestID: id))
+            return id
+        },
+        setPermissionMode: { mode in
+            let id = "req-\(UUID().uuidString.prefix(8))"
+            await recorder.record(.setPermissionMode(mode, requestID: id))
+            return id
+        },
         terminate: { await recorder.record(.terminate) })
     return (connection, continuation, recorder)
 }

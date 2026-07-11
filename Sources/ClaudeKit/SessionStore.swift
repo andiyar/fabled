@@ -104,6 +104,42 @@ public actor SessionStore {
         return entries
     }
 
+    /// On-disk subagent transcripts for a session, keyed by the parent's
+    /// Task tool_use id (from each agent's meta.json — census 2026-07-11).
+    /// Layout: <project>/<session-id>/subagents/agent-<agentId>.jsonl
+    ///       + <project>/<session-id>/subagents/agent-<agentId>.meta.json
+    /// Missing directory (no subagents) returns [:] — not an error. A meta or
+    /// jsonl that won't parse is skipped, never fatal (tolerant decoding law).
+    public func subagentTranscripts(
+        for session: SessionSummary
+    ) throws -> [String: [TranscriptEntry]] {
+        let fileManager = FileManager.default
+        let directory = session.fileURL.deletingPathExtension()
+            .appendingPathComponent("subagents")
+        guard fileManager.fileExists(atPath: directory.path) else { return [:] }
+        let contents = try fileManager.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)
+        var result: [String: [TranscriptEntry]] = [:]
+        for metaURL in contents where metaURL.lastPathComponent.hasSuffix(".meta.json") {
+            guard let metaData = try? Data(contentsOf: metaURL),
+                  let meta = try? JSONValue(parsing: metaData),
+                  let toolUseID = meta["toolUseId"]?.stringValue else { continue }
+            let transcriptURL = URL(fileURLWithPath: metaURL.path
+                .replacingOccurrences(of: ".meta.json", with: ".jsonl"))
+            guard let data = try? Data(contentsOf: transcriptURL, options: .mappedIfSafe)
+            else { continue }
+            var entries: [TranscriptEntry] = []
+            var lines = JSONLines(data: data)
+            while let line = lines.next() {
+                if let entry = try? TranscriptDecoder.decode(line) {
+                    entries.append(entry)
+                }
+            }
+            if !entries.isEmpty { result[toolUseID] = entries }
+        }
+        return result
+    }
+
     /// Stat-only enumeration of a project's session files (depth 2,
     /// `*.jsonl` regular files only). Shared by sessions(in:), the search
     /// indexer, and the change watcher.

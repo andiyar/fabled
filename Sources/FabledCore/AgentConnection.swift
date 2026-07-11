@@ -8,8 +8,10 @@ public struct AgentConnection: Sendable {
     public var send: @Sendable (String) async -> Void
     public var respond: @Sendable (PermissionRequest, PermissionDecision) async -> Void
     public var interrupt: @Sendable () async -> Void
-    public var setModel: @Sendable (String) async -> Void
-    public var setPermissionMode: @Sendable (String) async -> Void
+    /// Returns the CLI request id the control op was sent under, so the
+    /// caller can correlate its ack (ChatSession revert bookkeeping, T6).
+    public var setModel: @Sendable (String) async -> String
+    public var setPermissionMode: @Sendable (String) async -> String
     public var terminate: @Sendable () async -> Void
 
     public init(
@@ -17,8 +19,8 @@ public struct AgentConnection: Sendable {
         send: @escaping @Sendable (String) async -> Void,
         respond: @escaping @Sendable (PermissionRequest, PermissionDecision) async -> Void,
         interrupt: @escaping @Sendable () async -> Void,
-        setModel: @escaping @Sendable (String) async -> Void,
-        setPermissionMode: @escaping @Sendable (String) async -> Void,
+        setModel: @escaping @Sendable (String) async -> String,
+        setPermissionMode: @escaping @Sendable (String) async -> String,
         terminate: @escaping @Sendable () async -> Void
     ) {
         self.events = events
@@ -36,8 +38,8 @@ public struct AgentConnection: Sendable {
             send: { await session.send($0) },
             respond: { await session.respond(to: $0, decision: $1) },
             interrupt: { _ = await session.interrupt() },
-            setModel: { _ = await session.setModel($0) },
-            setPermissionMode: { _ = await session.setPermissionMode($0) },
+            setModel: { await session.setModel($0) },
+            setPermissionMode: { await session.setPermissionMode($0) },
             terminate: { await session.terminate() })
     }
 }
@@ -56,20 +58,30 @@ public struct SlashCommand: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One entry of the initialize response's model catalog (probe finding 9).
+/// One entry of the initialize response's model catalog (probe finding 9;
+/// effort metadata probe finding 5, 2026-07-11).
 public struct ModelOption: Sendable, Equatable, Identifiable {
     public let value: String
     public let resolvedModel: String?
     public let displayName: String
     public let optionDescription: String?
+    /// Whether the model takes an effort level. Hand-maintained knownModels
+    /// entries claim true with an EMPTY levels list = "unknown, offer the
+    /// standard five"; only the live catalog states levels authoritatively.
+    public let supportsEffort: Bool
+    public let supportedEffortLevels: [String]
     public var id: String { value }
 
     public init(value: String, resolvedModel: String?,
-                displayName: String, optionDescription: String?) {
+                displayName: String, optionDescription: String?,
+                supportsEffort: Bool = true,
+                supportedEffortLevels: [String] = []) {
         self.value = value
         self.resolvedModel = resolvedModel
         self.displayName = displayName
         self.optionDescription = optionDescription
+        self.supportsEffort = supportsEffort
+        self.supportedEffortLevels = supportedEffortLevels
     }
 }
 

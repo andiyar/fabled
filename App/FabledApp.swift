@@ -1,9 +1,12 @@
 import SwiftUI
+import AppKit
+import UserNotifications
 import FabledCore
 
 @main
 struct FabledApp: App {
     @State private var model: AppModel
+    private let notifier: Notifier
 
     init() {
         // Writes to a dead CLI's stdin raise SIGPIPE and the default
@@ -11,7 +14,16 @@ struct FabledApp: App {
         // termination; this is the process-level backstop for the race.
         signal(SIGPIPE, SIG_IGN)
         do {
-            _model = State(initialValue: try AppModel())
+            let model = try AppModel()
+            let notifier = Notifier()
+            notifier.onClick = { [weak model] id in
+                NSApp.activate()
+                model?.focusSession(id: id)
+            }
+            model.isAppActive = { NSApp.isActive }
+            model.postNotification = { notifier.post($0) }
+            _model = State(initialValue: model)
+            self.notifier = notifier
         } catch {
             // A failed SQLite open in Application Support means a broken
             // install; there is no UI to recover into yet.
@@ -30,5 +42,50 @@ struct FabledApp: App {
                     .keyboardShortcut("n", modifiers: .command)
             }
         }
+    }
+}
+
+/// Thin UNUserNotificationCenter wrapper: lazy permission, session-id
+/// userInfo, click callback. Kept out of FabledCore (AppKit/UN import).
+@MainActor
+final class Notifier: NSObject, UNUserNotificationCenterDelegate {
+    var onClick: ((UUID) -> Void)?
+    private var authorizationRequested = false
+
+    override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func post(_ note: LocalNotification) {
+        let center = UNUserNotificationCenter.current()
+        if !authorizationRequested {
+            authorizationRequested = true
+            center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        }
+        let content = UNMutableNotificationContent()
+        content.title = note.title
+        content.body = note.body
+        content.userInfo = ["sessionID": note.sessionID.uuidString]
+        center.add(UNNotificationRequest(
+            identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let info = response.notification.request.content.userInfo
+        guard let raw = info["sessionID"] as? String, let id = UUID(uuidString: raw)
+        else { return }
+        await MainActor.run { onClick?(id) }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        // App active but session unselected: still show the banner.
+        [.banner, .sound]
     }
 }

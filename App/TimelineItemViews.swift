@@ -2,10 +2,14 @@ import SwiftUI
 import ClaudeKit
 import FabledCore
 
-/// One timeline row. `session` is nil in read-only history.
+/// One timeline row. `subagentSteps` is the routed sub-item count for
+/// Task/Agent rows (live: ChatSession.subagentTimelines; historical: the
+/// on-disk read) — passing the COUNT instead of the session decouples rows
+/// from live-session observation (T11 4a review note) and lets history
+/// share the exact same row.
 struct TimelineItemView: View {
     let item: TimelineItem
-    let session: ChatSession?
+    var subagentSteps: Int? = nil
 
     var body: some View {
         switch item {
@@ -14,13 +18,11 @@ struct TimelineItemView: View {
         case .assistantText(_, let markdown, let isStreaming):
             AssistantTextView(markdown: markdown, isStreaming: isStreaming)
         case .toolCall(let id, let name, let summary, let input, let result, let isError, let isRunning):
-            // Reads the whole subagentTimelines property (Observation tracks
-            // per stored property), so every visible tool row re-renders per
-            // parented event — bounded by LazyVStack's visible rows; revisit
-            // if a busy subagent janks the transcript (T11 review).
             ToolCallCard(id: id, name: name, summary: summary, input: input,
                          result: result, isError: isError, isRunning: isRunning,
-                         subagentSteps: session?.subagentTimelines[id]?.count)
+                         subagentSteps: subagentSteps)
+        case .thinking(let id, let text, let isStreaming):
+            ThinkingItemView(id: id, text: text, isStreaming: isStreaming)
         case .permission(_, let request, let resolution):
             // Static status row — the interactive card renders in ComposerView while pending.
             PermissionStatusView(request: request, resolution: resolution)
@@ -88,7 +90,11 @@ struct ToolCallCard: View {
         HStack(spacing: 6) {
             ToolStatusIcon(isError: isError, isRunning: isRunning)
             Text(name).fontWeight(.medium)
-            Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            // Suppress the redundant summary when it just echoes the tool name
+            // (Agent calls summarize to their own name → "Agent Agent"; FOLLOWUPS).
+            if summary != name {
+                Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            }
             Spacer(minLength: 4)
             if let subagentSteps, subagentSteps > 0 {
                 Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
@@ -202,5 +208,51 @@ struct RawEventView: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .help("Show raw event in the inspector")
+    }
+}
+
+/// Collapsed tool-run row (digest §2a). Expansion state lives on the
+/// container (expandedGroups set) — never per-row @State (4a scar).
+struct ToolGroupRow: View {
+    let id: String
+    let items: [TimelineItem]
+    let summary: String
+    let isExpanded: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.spaceS) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                Text(summary).fontWeight(.medium)
+                Text("\(items.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+                Spacer(minLength: 4)
+            }
+            .font(.callout)
+            .padding(Theme.spaceS)
+            .background(.quinary, in: RoundedRectangle(cornerRadius: Theme.radiusCard))
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(Theme.snap) { toggle() } }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("\(summary), \(isExpanded ? "expanded" : "collapsed")")
+            .help(isExpanded ? "Collapse this run" : "Expand \(items.count) steps")
+            if isExpanded {
+                VStack(alignment: .leading, spacing: Theme.spaceS) {
+                    // Grouped runs never contain Task/Agent rows (anchors are
+                    // excluded from grouping), so no subagent counts here.
+                    ForEach(items) { item in
+                        TimelineItemView(item: item)
+                    }
+                }
+                .padding(.leading, Theme.spaceL)
+            }
+        }
     }
 }

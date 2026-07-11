@@ -25,21 +25,52 @@ struct SidebarView: View {
                 .padding(6)
             }
         }
+        .toolbar {
+            ToolbarItem {
+                Menu {
+                    Picker("Group by", selection: $app.sidebarOptions.groupBy) {
+                        Text("Project").tag(SidebarOptions.GroupBy.project)
+                        Text("Date").tag(SidebarOptions.GroupBy.date)
+                        Text("None").tag(SidebarOptions.GroupBy.none)
+                    }
+                    Picker("Sort by", selection: $app.sidebarOptions.sortBy) {
+                        Text("Recency").tag(SidebarOptions.SortBy.recency)
+                        Text("Name").tag(SidebarOptions.SortBy.name)
+                    }
+                    Picker("Last activity", selection: Binding(
+                        get: { app.sidebarOptions.activityWindow.days ?? 0 },
+                        set: { app.sidebarOptions.activityWindow = $0 == 0 ? .all : .days($0) }
+                    )) {
+                        ForEach(SidebarOptions.ActivityWindow.presets, id: \.label) { preset in
+                            Text(preset.label).tag(preset.days ?? 0)
+                        }
+                    }
+                } label: {
+                    Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .help("Group, sort, and filter sessions")
+            }
+        }
     }
 
     @ViewBuilder private var liveSection: some View {
         if !app.liveSessions.isEmpty {
             Section("Live") {
                 ForEach(app.liveSessions) { session in
-                    HStack(spacing: 8) {
-                        Circle().fill(dotColor(session.activityState))
-                            .frame(width: 8, height: 8)
+                    HStack(spacing: Theme.spaceS) {
+                        SessionStatusBadge(state: session.activityState)
                         VStack(alignment: .leading) {
                             Text(session.title).lineLimit(1)
-                            Text(session.workingDirectory.lastPathComponent)
+                                .fontWeight(session.activityState == .needsApproval
+                                    ? .semibold : .regular)
+                            Text(statusLine(for: session))
                                 .font(.caption).foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
+                    .listRowBackground(
+                        session.activityState == .needsApproval
+                            ? Theme.statusNeedsInput.opacity(0.10) : nil)
                     .tag(AppModel.Selection.live(session.id))
                     .contextMenu {
                         Button("End Session", role: .destructive) {
@@ -52,19 +83,29 @@ struct SidebarView: View {
     }
 
     private var historySections: some View {
-        ForEach(app.history) { group in
-            Section(group.project.displayName) {
+        ForEach(app.sidebarSections) { section in
+            Section(section.title) {
                 // v1 keeps sections shallow; search covers the deep tail.
-                ForEach(group.sessions.prefix(10)) { summary in
+                ForEach(section.sessions.prefix(10)) { summary in
                     VStack(alignment: .leading) {
                         Text(summary.title).lineLimit(1)
                         Text(summary.lastActivity, format: .relative(presentation: .named))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .tag(AppModel.Selection.historical(summary.id))
+                    .contextMenu {
+                        Button(app.sidebarOptions.pinnedSessionIDs.contains(summary.id)
+                            ? "Unpin" : "Pin") { app.togglePin(summary.id) }
+                        Button("Continue Session") {
+                            Task { await app.resume(summary, fork: false) }
+                        }
+                        Button("Fork Session") {
+                            Task { await app.resume(summary, fork: true) }
+                        }
+                    }
                 }
-                if group.sessions.count > 10 {
-                    Text("\(group.sessions.count - 10) more — use search")
+                if section.sessions.count > 10 {
+                    Text("\(section.sessions.count - 10) more — use search")
                         .font(.caption).foregroundStyle(.tertiary)
                 }
             }
@@ -84,12 +125,9 @@ struct SidebarView: View {
         }
     }
 
-    private func dotColor(_ state: ChatSession.ActivityState) -> Color {
-        switch state {
-        case .working: Theme.clay
-        case .needsApproval: .red
-        case .idle: .green
-        case .ended: .gray
-        }
+    /// Second line: what the session is waiting on beats where it lives.
+    private func statusLine(for session: ChatSession) -> String {
+        if let gate = session.pendingGate { return gate.summaryLine }
+        return session.workingDirectory.lastPathComponent
     }
 }

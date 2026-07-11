@@ -23,13 +23,19 @@ public enum AgentEventDecoder {
                 raw: raw))
         case "user":
             let blocks = raw["message"]?["content"]?.arrayValue ?? []
-            let results = blocks.compactMap { block -> ToolResult? in
-                guard block["type"]?.stringValue == "tool_result",
-                      let id = block["tool_use_id"]?.stringValue else { return nil }
+            let resultBlocks = blocks.filter {
+                $0["type"]?.stringValue == "tool_result"
+            }
+            // Line-level field; unambiguous only for single-result lines
+            // (probe finding 10).
+            let lineResult = resultBlocks.count == 1 ? raw["tool_use_result"] : nil
+            let results = resultBlocks.compactMap { block -> ToolResult? in
+                guard let id = block["tool_use_id"]?.stringValue else { return nil }
                 return ToolResult(
                     toolUseID: id,
                     content: block["content"] ?? .null,
-                    isError: block["is_error"]?.boolValue ?? false)
+                    isError: block["is_error"]?.boolValue ?? false,
+                    toolUseResult: lineResult)
             }
             return .toolResult(results,
                                parentToolUseID: raw["parent_tool_use_id"]?.stringValue)
@@ -54,7 +60,8 @@ public enum AgentEventDecoder {
             return .controlResponse(ControlResponseEnvelope(
                 requestID: response?["request_id"]?.stringValue ?? "",
                 subtype: response?["subtype"]?.stringValue ?? "",
-                payload: response?["response"]))
+                payload: response?["response"],
+                errorMessage: response?["error"]?.stringValue))
         case "stream_event":
             return .streamEvent(Self.streamEvent(from: raw))
         default:

@@ -141,9 +141,33 @@ final class ChatSessionTests: XCTestCase {
         try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.01,"uuid":"r1"}"#)
         await waitUntil("first result") { session.cumulativeCostUSD > 0 }
         XCTAssertTrue(session.isWorking, "one of two turns still in flight")
-        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.02,"uuid":"r2"}"#)
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.025,"uuid":"r2"}"#)
         await waitUntil("second result") { !session.isWorking }
-        XCTAssertEqual(session.cumulativeCostUSD, 0.03, accuracy: 0.0001)
+        // total_cost_usd is session-cumulative on the wire — assigned, not
+        // summed (0.035 here would mean double-counting).
+        XCTAssertEqual(session.cumulativeCostUSD, 0.025, accuracy: 0.0001)
+    }
+
+    func testCostTracksWireCumulative() async throws {
+        let (session, continuation, _) = makeSession()
+        // total_cost_usd is SESSION-CUMULATIVE on the wire (slashfx +
+        // control-ops fixtures, 2026-07-11): assign, never sum.
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0.01,"usage":{"input_tokens":100},"uuid":"r1"}"#)
+        await waitUntil("first result") { session.cumulativeCostUSD > 0 }
+        XCTAssertEqual(session.cumulativeCostUSD, 0.01, accuracy: 0.0001)
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0.025,"usage":{"input_tokens":250},"uuid":"r2"}"#)
+        await waitUntil("second result") { session.cumulativeCostUSD > 0.02 }
+        XCTAssertEqual(session.cumulativeCostUSD, 0.025, accuracy: 0.0001,
+                       "cumulative wire value assigned, not summed (0.035 = double-count)")
+        XCTAssertEqual(session.lastUsage?["input_tokens"]?.doubleValue, 250)
+        // A synthetic slash result (num_turns 0) echoes the cumulative cost
+        // unchanged and carries all-zeros usage — neither may clobber state.
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"num_turns":0,"total_cost_usd":0.025,"usage":{"input_tokens":0},"uuid":"r3"}"#)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(session.cumulativeCostUSD, 0.025, accuracy: 0.0001,
+                       "synthetic echo leaves the cumulative value unchanged")
+        XCTAssertEqual(session.lastUsage?["input_tokens"]?.doubleValue, 250,
+                       "synthetic all-zeros usage must not overwrite the real turn's")
     }
 
     func testPermissionFlow() async throws {
@@ -200,6 +224,22 @@ final class ChatSessionTests: XCTestCase {
         await waitUntil("ended") { session.hasEnded }
         XCTAssertEqual(session.activityState, .ended)
         XCTAssertFalse(session.isWorking)
+    }
+
+    func testTerminatedAbandonsPendingGates() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git init"},"permission_suggestions":[]}}
+        """#)
+        await waitUntil("pending permission") { session.pendingGate != nil }
+
+        // A dead CLI can no longer consume a decision — the gate must not
+        // ghost-count in the dock badge or render a dead interactive card.
+        continuation.yield(.terminated(exitCode: 1))
+        continuation.finish()
+        await waitUntil("gate abandoned") { session.pendingGate == nil }
+        XCTAssertTrue(session.pendingGates.isEmpty)
+        XCTAssertEqual(session.activityState, .ended)
     }
 
     func testTerminatedBeforeInitSurfacesLoudBanner() async throws {
@@ -357,5 +397,241 @@ final class ChatSessionTests: XCTestCase {
         }
         XCTAssertFalse(session.isThinking,
                        "subagent stream state must not drive the parent spinner")
+    }
+
+    func testCatalogHarvestsEffortMetadata() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"commands":[],"models":[{"value":"default","resolvedModel":"claude-opus-4-8[1m]","displayName":"Default (recommended)","supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max"]},{"value":"haiku","displayName":"Haiku","supportsEffort":false}]}}}
+        """#)
+        await waitUntil("catalog") { !session.models.isEmpty }
+        XCTAssertTrue(session.models[0].supportsEffort)
+        XCTAssertEqual(session.models[0].supportedEffortLevels,
+                       ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertFalse(session.models[1].supportsEffort)
+        XCTAssertEqual(session.models[1].supportedEffortLevels, [])
+    }
+
+    func testSetEffortSendsSlashCommandAndSetsState() async throws {
+        let (session, continuation, recorder) = makeSession()
+        _ = continuation
+        session.setEffort("medium")
+        XCTAssertEqual(session.currentEffort, "medium")
+        let entries = await waitForEntries(recorder, count: 1)
+        XCTAssertEqual(entries, [.send("/effort medium")])
+        // The local echo appears in the timeline like any user message.
+        XCTAssertTrue(session.timeline.contains {
+            if case .userMessage(_, "/effort medium") = $0 { return true }
+            return false
+        })
+    }
+
+    func testSyntheticSlashResultPreservesPendingGates() async throws {
+        let (session, continuation, _) = makeSession()
+        // A pending permission gate…
+        try yield(continuation, #"""
+        {"type":"control_request","request_id":"perm-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}
+        """#)
+        await waitUntil("gate") { session.pendingGate != nil }
+        // …must survive a synthetic slash-command result (num_turns == 0,
+        // probe finding 12)…
+        try yield(continuation, #"""
+        {"type":"result","subtype":"success","is_error":false,"num_turns":0,"duration_ms":1,"result":"Set effort level to medium (this session only)","session_id":"s"}
+        """#)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNotNil(session.pendingGate, "slash result must not clear gates")
+        // …and still be cleared by a real turn's result (4a abort semantics).
+        try yield(continuation, #"""
+        {"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":3,"duration_ms":100,"session_id":"s"}
+        """#)
+        await waitUntil("gate cleared") { session.pendingGate == nil }
+    }
+
+    func testLaunchEffortSeedsCurrentEffort() {
+        let (connection, _, _) = makeFakeConnection()
+        let session = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"),
+            effort: "medium")
+        XCTAssertEqual(session.currentEffort, "medium")
+    }
+
+    func testThinkingTokensTickerAccumulatesAndResets() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"system","subtype":"thinking_tokens","estimated_tokens":44,"estimated_tokens_delta":17,"uuid":"tt1","session_id":"s"}
+        """#)
+        await waitUntil("ticker") { session.thinkingTokens == 44 }
+        // estimated_tokens is cumulative — each event reassigns, not adds.
+        try yield(continuation, #"""
+        {"type":"system","subtype":"thinking_tokens","estimated_tokens":61,"estimated_tokens_delta":17,"uuid":"tt2","session_id":"s"}
+        """#)
+        await waitUntil("ticker update") { session.thinkingTokens == 61 }
+        try yield(continuation, #"""
+        {"type":"result","subtype":"success","is_error":false,"num_turns":1,"duration_ms":5,"session_id":"s"}
+        """#)
+        await waitUntil("reset") { session.thinkingTokens == nil }
+    }
+
+    func testTaskToolTrafficFeedsSessionTasks() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"assistant","message":{"role":"assistant","model":"m","content":[{"type":"tool_use","id":"toolu_1","name":"TaskCreate","input":{"subject":"Alpha task","description":"d","activeForm":"Alpha running"}}]},"session_id":"s","uuid":"a1"}
+        """#)
+        try yield(continuation, #"""
+        {"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":"Task #1 created successfully: Alpha task"}]},"session_id":"s","uuid":"u1","tool_use_result":{"task":{"id":"1","subject":"Alpha task"}}}
+        """#)
+        await waitUntil("task") { !session.sessionTasks.isEmpty }
+        XCTAssertEqual(session.sessionTasks[0].taskID, "1")
+        XCTAssertEqual(session.sessionTasks[0].subject, "Alpha task")
+    }
+
+    // MARK: - Control-op ack correlation + liveness (4b T6)
+
+    func testRejectedSetModelRevertsAndNotices() async throws {
+        let (session, continuation, recorder) = makeSession()
+        // Session knows its model (catalog default path).
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"commands":[],"models":[{"value":"default","resolvedModel":"claude-opus-4-8","displayName":"Default"}]}}}
+        """#)
+        await waitUntil("ready") { session.isReady }
+        XCTAssertEqual(session.currentModel, "claude-opus-4-8")
+        session.setModel("totally-bogus-model-9000")
+        XCTAssertEqual(session.currentModel, "totally-bogus-model-9000",
+                       "optimistic until the ack")
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .setModel(_, let requestID) = entries.first else {
+            return XCTFail("expected setModel, got \(entries)")
+        }
+        // Error ack with the recorded request id (badmodel fixture shape).
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"error","request_id":"\#(requestID)","error":"Model \"totally-bogus-model-9000\" is not a recognized model id."}}
+        """#)
+        await waitUntil("revert") { session.currentModel == "claude-opus-4-8" }
+        XCTAssertTrue(session.timeline.contains {
+            if case .notice(_, let text) = $0 { return text.contains("not a recognized") }
+            return false
+        }, "the rejection reason surfaces as a notice")
+    }
+
+    func testRejectedSetPermissionModeReverts() async throws {
+        let (session, continuation, recorder) = makeSession()
+        session.setPermissionMode("plan")
+        XCTAssertEqual(session.permissionMode, "plan")
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .setPermissionMode(_, let requestID) = entries.first else {
+            return XCTFail("expected setPermissionMode, got \(entries)")
+        }
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"error","request_id":"\#(requestID)","error":"nope"}}
+        """#)
+        await waitUntil("revert") { session.permissionMode == "default" }
+        XCTAssertTrue(session.timeline.contains {
+            if case .notice(_, let text) = $0 { return text.contains("nope") }
+            return false
+        }, "the rejection reason surfaces as a notice")
+    }
+
+    func testSuccessAckKeepsOptimisticValue() async throws {
+        let (session, continuation, recorder) = makeSession()
+        session.setModel("haiku")
+        let entries = await waitForEntries(recorder, count: 1)
+        guard case .setModel(_, let requestID) = entries.first else {
+            return XCTFail("expected setModel, got \(entries)")
+        }
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"\#(requestID)","response":{}}}
+        """#)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(session.currentModel, "haiku")
+    }
+
+    func testLastEventAtTracksWireActivity() async throws {
+        let (session, continuation, _) = makeSession()
+        XCTAssertNil(session.lastEventAt)
+        try yield(continuation, #"""
+        {"type":"system","subtype":"status","status":"requesting","uuid":"s1","session_id":"s"}
+        """#)
+        await waitUntil("stamp") { session.lastEventAt != nil }
+    }
+
+    func testSendResetsLivenessBaseline() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"system","subtype":"status","status":"requesting","uuid":"s1","session_id":"s"}
+        """#)
+        await waitUntil("stamp") { session.lastEventAt != nil }
+        let captured = try XCTUnwrap(session.lastEventAt)
+        try await Task.sleep(for: .milliseconds(30))
+        session.send("hi")
+        let after = try XCTUnwrap(session.lastEventAt)
+        XCTAssertGreaterThan(after, captured,
+                             "send must reset the quiet-clock baseline")
+    }
+
+    func testStaleErrorAckDoesNotClobberNewerPick() async throws {
+        let (session, continuation, recorder) = makeSession()
+        session.setModel("model-a")
+        session.setModel("model-b")
+        let entries = await waitForEntries(recorder, count: 2)
+        var reqA: String?
+        var reqB: String?
+        for entry in entries {
+            if case .setModel("model-a", let id) = entry { reqA = id }
+            if case .setModel("model-b", let id) = entry { reqB = id }
+        }
+        let staleID = try XCTUnwrap(reqA)
+        let newerID = try XCTUnwrap(reqB)
+        // The newer pick succeeds…
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"\#(newerID)","response":{}}}
+        """#)
+        // …then the older pick's rejection arrives late. Its revert must not
+        // clobber the newer value (last write wins).
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"error","request_id":"\#(staleID)","error":"stale rejection"}}
+        """#)
+        await waitUntil("stale ack processed") {
+            session.timeline.contains {
+                if case .notice(let id, _) = $0 {
+                    return id == "control-error-\(staleID)"
+                }
+                return false
+            }
+        }
+        XCTAssertEqual(session.currentModel, "model-b")
+    }
+
+    func testNoteworthyHookFiresForGateTurnAndTermination() async throws {
+        let (session, continuation, _) = makeSession()
+        var seen: [ChatSession.NoteworthyEvent] = []
+        session.onNoteworthy = { seen.append($0) }
+        try yield(continuation, #"""
+        {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}
+        """#)
+        try yield(continuation, #"""
+        {"type":"system","subtype":"post_turn_summary","summarizes_uuid":"u","status_category":"review_ready","status_detail":"replied with READY-OK","needs_action":"","uuid":"pts","session_id":"s"}
+        """#)
+        try yield(continuation, #"""
+        {"type":"result","subtype":"success","is_error":false,"num_turns":1,"duration_ms":45000,"session_id":"s"}
+        """#)
+        await waitUntil("hook") { seen.count >= 2 }
+        guard case .gateArrived = seen[0] else { return XCTFail("expected gate, got \(seen)") }
+        guard case .turnCompleted(let detail, let duration) = seen[1] else {
+            return XCTFail("expected turn, got \(seen)")
+        }
+        XCTAssertEqual(detail, "replied with READY-OK")
+        XCTAssertEqual(duration, 45000)
+    }
+
+    func testDraftIsSessionState() {
+        let (connection, _, _) = makeFakeConnection()
+        let a = ChatSession(connection: connection,
+                            workingDirectory: URL(fileURLWithPath: "/tmp/a"))
+        let b = ChatSession(connection: connection,
+                            workingDirectory: URL(fileURLWithPath: "/tmp/b"))
+        a.draft = "half-typed thought"
+        XCTAssertEqual(a.draft, "half-typed thought")
+        XCTAssertEqual(b.draft, "", "drafts never leak across sessions")
     }
 }

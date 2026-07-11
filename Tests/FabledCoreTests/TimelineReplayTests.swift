@@ -23,6 +23,7 @@ final class TimelineReplayTests: XCTestCase {
             case .turnSummary: c.turn += 1
             case .notice: c.notice += 1
             case .raw: c.raw += 1
+            case .thinking: break  // counted by the dedicated thinking test
             }
         }
         return c
@@ -98,10 +99,14 @@ final class TimelineReplayTests: XCTestCase {
 
     func testPartialMessagesReplay() throws {
         let items = try replay("2026-07-09-partial-messages.jsonl")
-        XCTAssertEqual(items.count, 2)
-        guard case .assistantText(_, "The quick brown fox jumps over the lazy dog.", false) = items[0]
+        // The turn thinks before answering, so a finalized thinking item now
+        // leads the text and turn summary (4b T3).
+        XCTAssertEqual(items.count, 3)
+        guard case .thinking(_, _, false) = items[0]
         else { return XCTFail("\(items)") }
-        guard case .turnSummary = items[1] else { return XCTFail("\(items)") }
+        guard case .assistantText(_, "The quick brown fox jumps over the lazy dog.", false) = items[1]
+        else { return XCTFail("\(items)") }
+        guard case .turnSummary = items[2] else { return XCTFail("\(items)") }
     }
 
     func testControlOpsReplay() throws {
@@ -198,5 +203,35 @@ final class TimelineReplayTests: XCTestCase {
         let c = census(items)
         XCTAssertEqual(c.user, 1)
         XCTAssertEqual(c.text, 1)
+    }
+
+    func testSlashfxFixtureProducesThinkingItems() throws {
+        var items: [TimelineItem] = []
+        for event in try CoreFixtures.events("2026-07-11-slashfx.jsonl") {
+            items = TimelineReducer.reduce(items, event)
+        }
+        let thinking = items.compactMap { item -> Bool? in
+            if case .thinking(_, _, let streaming) = item { return streaming }
+            return nil
+        }
+        XCTAssertFalse(thinking.isEmpty, "fixture carries thinking turns")
+        XCTAssertTrue(thinking.allSatisfy { $0 == false },
+                      "every thinking item finalizes by end of fixture")
+    }
+
+    @MainActor
+    func testTasktoolsFixtureFoldsToFinalChecklist() async throws {
+        let (connection, continuation, _) = makeFakeConnection()
+        let session = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"))
+        session.begin()
+        for event in try CoreFixtures.events("2026-07-11-tasktools.jsonl") {
+            continuation.yield(event)
+        }
+        // Probe script: Alpha completed, Beta pending, Gamma deleted.
+        await waitUntil("fold") { session.sessionTasks.count == 2 }
+        XCTAssertEqual(session.sessionTasks.map(\.subject), ["Alpha task", "Beta task"])
+        XCTAssertEqual(session.sessionTasks.map(\.status), [.completed, .pending])
     }
 }

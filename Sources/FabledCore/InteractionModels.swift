@@ -108,3 +108,18 @@ public enum InteractionGate: Equatable, Sendable, Identifiable {
     }
     public var id: String { requestID }
 }
+
+public extension InteractionGate {
+    /// One line for inbox/sidebar rows: what is the agent waiting on?
+    /// (CD welcome pattern — digest §1.)
+    var summaryLine: String {
+        switch self {
+        case .permission(let request):
+            return "Approve: " + PermissionPrompt.commandSummary(for: request)
+        case .question(let prompt):
+            return prompt.questions.first?.text ?? "Question waiting"
+        case .planApproval:
+            return "Plan ready for review"
+        }
+    }
+}

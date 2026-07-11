@@ -47,7 +47,12 @@ final class TimelineReducerTests: XCTestCase {
         let items = try reduceAll([
             #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":""},{"type":"thinking","thinking":"hmm"}]},"uuid":"a1"}"#,
         ])
-        XCTAssertTrue(items.isEmpty, "thinking-only / empty-text messages render nothing")
+        // The empty text block renders nothing; the thinking block now renders
+        // a single finalized item (4b T3) — so exactly one item, no text row.
+        XCTAssertEqual(items.count, 1)
+        guard case .thinking(_, "hmm", false) = items[0] else {
+            return XCTFail("empty text skipped, thinking finalized: \(items)")
+        }
     }
 
     func testToolCallLifecycle() throws {
@@ -131,5 +136,90 @@ final class TimelineReducerTests: XCTestCase {
         XCTAssertEqual(JSONPretty.string(.string("plain text")), "plain text")
         XCTAssertTrue(JSONPretty.string(.object(["b": .number(1), "a": .bool(true)]))
             .contains("\"a\" : true"))
+    }
+
+    // MARK: - Thinking (4b T3)
+
+    private func thinkingDelta(_ text: String, uuid: String = "u") throws -> AgentEvent {
+        try AgentEventDecoder.decode(Data(#"""
+        {"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\#(text)","estimated_tokens":null}},"session_id":"s","parent_tool_use_id":null,"uuid":"\#(uuid)"}
+        """#.utf8))
+    }
+
+    func testThinkingDeltasCoalesceIntoOneItem() throws {
+        var items: [TimelineItem] = []
+        items = TimelineReducer.reduce(items, try thinkingDelta("The user", uuid: "t1"))
+        items = TimelineReducer.reduce(items, try thinkingDelta(" wants a plan"))
+        XCTAssertEqual(items.count, 1)
+        guard case .thinking(let id, let text, let isStreaming) = items[0] else {
+            return XCTFail("expected thinking, got \(items)")
+        }
+        XCTAssertEqual(id, "t1")
+        XCTAssertEqual(text, "The user wants a plan")
+        XCTAssertTrue(isStreaming)
+    }
+
+    func testAssistantThinkingBlockFinalizesStreamedItem() throws {
+        var items: [TimelineItem] = []
+        items = TimelineReducer.reduce(items, try thinkingDelta("The user wants", uuid: "t1"))
+        let assistant = try AgentEventDecoder.decode(Data(#"""
+        {"type":"assistant","message":{"role":"assistant","model":"m","content":[{"type":"thinking","thinking":"The user wants a plan.","signature":"sig"},{"type":"text","text":"Here it is."}]},"session_id":"s","uuid":"a1"}
+        """#.utf8))
+        items = TimelineReducer.reduce(items, assistant)
+        guard case .thinking(let id, let text, let isStreaming) = items[0] else {
+            return XCTFail("expected finalized thinking first, got \(items)")
+        }
+        XCTAssertEqual(id, "t1", "same item id — update in place, not remove+insert")
+        XCTAssertEqual(text, "The user wants a plan.")
+        XCTAssertFalse(isStreaming)
+        guard case .assistantText = items[1] else {
+            return XCTFail("expected assistant text second, got \(items)")
+        }
+    }
+
+    func testReplayRendersThinkingFromTranscriptBlocks() throws {
+        // No streaming preceded it (replay path) — the block appends finalized.
+        let assistant = try AgentEventDecoder.decode(Data(#"""
+        {"type":"assistant","message":{"role":"assistant","model":"m","content":[{"type":"thinking","thinking":"Recorded thought.","signature":"sig"}]},"session_id":"s","uuid":"a1"}
+        """#.utf8))
+        let items = TimelineReducer.reduce([], assistant)
+        guard case .thinking(_, "Recorded thought.", false) = items[0] else {
+            return XCTFail("expected finalized thinking, got \(items)")
+        }
+    }
+
+    func testTextDeltaAfterThinkingDoesNotCoalesceIntoIt() throws {
+        var items: [TimelineItem] = []
+        items = TimelineReducer.reduce(items, try thinkingDelta("hmm", uuid: "t1"))
+        let textDelta = try AgentEventDecoder.decode(Data(#"""
+        {"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Answer"}},"session_id":"s","uuid":"x1"}
+        """#.utf8))
+        items = TimelineReducer.reduce(items, textDelta)
+        XCTAssertEqual(items.count, 2)
+        guard case .assistantText(_, "Answer", true) = items[1] else {
+            return XCTFail("expected separate streaming text, got \(items)")
+        }
+    }
+
+    func testResultFinalizesDanglingThinking() throws {
+        var items: [TimelineItem] = []
+        items = TimelineReducer.reduce(items, try thinkingDelta("interrupted", uuid: "t1"))
+        let result = try AgentEventDecoder.decode(Data(#"""
+        {"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":1,"uuid":"r1","session_id":"s"}
+        """#.utf8))
+        items = TimelineReducer.reduce(items, result)
+        guard case .thinking(_, _, false) = items[0] else {
+            return XCTFail("dangling thinking must finalize, got \(items)")
+        }
+    }
+
+    func testTranscriptReplayCanIncludeSidechainLines() throws {
+        let line = Data(#"{"type":"user","isSidechain":true,"message":{"role":"user","content":"subagent prompt"},"sessionId":"s","uuid":"u1","timestamp":"2026-07-11T00:00:00Z"}"#.utf8)
+        let entry = try TranscriptDecoder.decode(line)
+        XCTAssertTrue(TimelineReducer.items(fromTranscript: [entry]).isEmpty,
+                      "main-chain replay keeps skipping sidechain")
+        XCTAssertFalse(TimelineReducer.items(fromTranscript: [entry],
+                                             allowSidechain: true).isEmpty,
+                       "subagent replay reads its own sidechain lines")
     }
 }
