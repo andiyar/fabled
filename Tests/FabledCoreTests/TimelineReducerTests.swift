@@ -212,4 +212,14 @@ final class TimelineReducerTests: XCTestCase {
             return XCTFail("dangling thinking must finalize, got \(items)")
         }
     }
+
+    func testTranscriptReplayCanIncludeSidechainLines() throws {
+        let line = Data(#"{"type":"user","isSidechain":true,"message":{"role":"user","content":"subagent prompt"},"sessionId":"s","uuid":"u1","timestamp":"2026-07-11T00:00:00Z"}"#.utf8)
+        let entry = try TranscriptDecoder.decode(line)
+        XCTAssertTrue(TimelineReducer.items(fromTranscript: [entry]).isEmpty,
+                      "main-chain replay keeps skipping sidechain")
+        XCTAssertFalse(TimelineReducer.items(fromTranscript: [entry],
+                                             allowSidechain: true).isEmpty,
+                       "subagent replay reads its own sidechain lines")
+    }
 }

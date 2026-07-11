@@ -71,23 +71,26 @@ public enum TimelineReducer {
     }
 
     /// Read-only history: an on-disk transcript rendered through the same
-    /// vocabulary. Main-chain only — sidechain (subagent) traffic, titles,
-    /// and bookkeeping lines are not conversation.
-    public static func items(fromTranscript entries: [TranscriptEntry]) -> [TimelineItem] {
+    /// vocabulary. Main-chain only by default — sidechain (subagent) traffic,
+    /// titles, and bookkeeping lines are not conversation. `allowSidechain`
+    /// flips the two sidechain guards for subagent replay, where the agent's
+    /// OWN sidechain lines ARE its conversation (4b Task 14 drill-down).
+    public static func items(fromTranscript entries: [TranscriptEntry],
+                             allowSidechain: Bool = false) -> [TimelineItem] {
         var items: [TimelineItem] = []
         var lineIndex = 0
         for entry in entries {
             lineIndex += 1
             switch entry {
             case .userPrompt(let text, let context, _):
-                guard !context.isSidechain, !context.isMeta else { continue }
+                guard allowSidechain || !context.isSidechain, !context.isMeta else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 // Machine-generated prompts (<command-name>…, caveats) are
                 // not conversation; same rule as title derivation.
                 guard !trimmed.isEmpty, !trimmed.hasPrefix("<") else { continue }
                 items = appendUserMessage(items, id: context.uuid ?? "line-\(lineIndex)", text: text)
             case .event(let event, let context):
-                guard !context.isSidechain else { continue }
+                guard allowSidechain || !context.isSidechain else { continue }
                 items = reduce(items, event)
             case .title, .summary, .queueOperation, .attachment, .sessionMeta, .unknown:
                 continue

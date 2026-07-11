@@ -88,7 +88,9 @@ struct ConversationView: View {
                         ForEach(TimelineDisplay.grouped(session.timeline)) { row in
                             switch row {
                             case .item(let item):
-                                TimelineItemView(item: item, session: session)
+                                TimelineItemView(item: item,
+                                                 subagentSteps: item.toolCallID
+                                                     .flatMap { session.subagentTimelines[$0]?.count })
                             case .toolGroup(let id, let items, let summary):
                                 ToolGroupRow(
                                     id: id, items: items, summary: summary,

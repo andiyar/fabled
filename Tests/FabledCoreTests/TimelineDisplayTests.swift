@@ -71,4 +71,50 @@ final class TimelineDisplayTests: XCTestCase {
         XCTAssertEqual(summaryOf(["Read", "Read", "Read", "Read"]), "4 × Read")
         XCTAssertEqual(summaryOf(["Read", "Bash", "Edit"]), "3 steps")
     }
+
+    // MARK: - Row identity + run-breaking (T13 review rider)
+
+    func testRowIDsArePrefixed() {
+        // A grouped run's row id is namespaced so it can't collide with a
+        // plain item that happens to share the first tool's id.
+        let grouped = TimelineDisplay.grouped([tool("t1"), tool("t2"), tool("t3")])
+        XCTAssertEqual(grouped.count, 1)
+        XCTAssertEqual(grouped[0].id, "group-t1")
+        // A plain item row keeps the item's own id verbatim.
+        let plain = TimelineDisplay.grouped([text("a")])
+        XCTAssertEqual(plain[0].id, "a")
+    }
+
+    func testGroupIDStableAsRunGrows() {
+        func firstGroupID(_ items: [TimelineItem]) -> String? {
+            guard case .toolGroup(let id, _, _) = TimelineDisplay.grouped(items).first
+            else { return nil }
+            return id
+        }
+        // Appending a 4th tool to a run must not shift the group's identity —
+        // it stays anchored on the first item so SwiftUI keeps the row.
+        XCTAssertEqual(firstGroupID([tool("t1"), tool("t2"), tool("t3")]), "t1")
+        XCTAssertEqual(firstGroupID([tool("t1"), tool("t2"), tool("t3"), tool("t4")]), "t1")
+    }
+
+    func testThinkingBreaksRun() {
+        let thinking = TimelineItem.thinking(id: "th", text: "x", isStreaming: false)
+        // Without the thinking line, six tools collapse into ONE group; the
+        // thinking item between them must split the run into two groups.
+        let rows = TimelineDisplay.grouped(
+            [tool("t1"), tool("t2"), tool("t3"), thinking,
+             tool("t4"), tool("t5"), tool("t6")])
+        XCTAssertEqual(rows.count, 3, "thinking splits: group | thinking | group")
+        guard case .toolGroup(let firstID, _, _) = rows[0] else {
+            return XCTFail("expected leading group, got \(rows)")
+        }
+        XCTAssertEqual(firstID, "t1")
+        guard case .item(let mid) = rows[1], mid.id == "th" else {
+            return XCTFail("thinking must render alone, got \(rows)")
+        }
+        guard case .toolGroup(let lastID, _, _) = rows[2] else {
+            return XCTFail("expected trailing group, got \(rows)")
+        }
+        XCTAssertEqual(lastID, "t4")
+    }
 }

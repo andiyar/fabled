@@ -151,7 +151,7 @@ struct InspectorPanel: View {
                 // too — the container's inspectedItem lookup already searches
                 // sub-timelines.
                 ForEach(sub) { item in
-                    TimelineItemView(item: item, session: nil)
+                    TimelineItemView(item: item)
                 }
             }
         }

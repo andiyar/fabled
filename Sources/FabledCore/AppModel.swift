@@ -276,6 +276,19 @@ public final class AppModel {
         return TimelineReducer.items(fromTranscript: entries)
     }
 
+    /// Subagent drill-down data for a HISTORICAL session — the on-disk
+    /// analog of ChatSession.subagentTimelines (feature 15 as rescoped).
+    /// Keyed by the parent's Task tool_use id; each value is that agent's own
+    /// timeline (sidechain lines included — they ARE its conversation).
+    public func historicalSubagentTimelines(
+        for summary: SessionSummary
+    ) async -> [String: [TimelineItem]] {
+        let transcripts = (try? await store.subagentTranscripts(for: summary)) ?? [:]
+        return transcripts.mapValues {
+            TimelineReducer.items(fromTranscript: $0, allowSidechain: true)
+        }
+    }
+
     private func launch(_ configuration: SessionConfiguration, seed: [TimelineItem]) async {
         do {
             let session = try await ChatSession.launch(configuration: configuration)

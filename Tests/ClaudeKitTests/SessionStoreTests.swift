@@ -138,4 +138,52 @@ final class SessionStoreTests: XCTestCase {
         let sessions = try await store.sessions(in: try await store.projects()[0])
         XCTAssertEqual(sessions.count, 0)
     }
+
+    // MARK: - Subagent transcripts (4b Task 14)
+
+    /// Builds a project with one session file plus a nested subagent tree:
+    /// `<project>/<id>/subagents/agent-abc.jsonl` (+ optional `.meta.json`).
+    /// Returns the project directory so callers can enumerate it.
+    @discardableResult
+    private func makeSubagentTree(
+        writeMeta: Bool
+    ) throws -> URL {
+        let project = try makeProject("-tmp-proj")
+        try writeSession(
+            project, id: "aaaa-1111",
+            contents: #"{"type":"user","message":{"role":"user","content":"hi"},"sessionId":"aaaa-1111","uuid":"u1","timestamp":"2026-07-11T00:00:00Z"}"# + "\n")
+        let subagents = project.appendingPathComponent("aaaa-1111/subagents")
+        try FileManager.default.createDirectory(at: subagents, withIntermediateDirectories: true)
+        try Data(#"{"type":"user","isSidechain":true,"agentId":"abc","message":{"role":"user","content":"task prompt"},"sessionId":"aaaa-1111","uuid":"u2","timestamp":"2026-07-11T00:00:01Z"}"#.utf8)
+            .write(to: subagents.appendingPathComponent("agent-abc.jsonl"))
+        if writeMeta {
+            let meta = #"{"agentType":"general-purpose","description":"count files","toolUseId":"toolu_XYZ","spawnDepth":1}"#
+            try Data(meta.utf8)
+                .write(to: subagents.appendingPathComponent("agent-abc.meta.json"))
+        }
+        return project
+    }
+
+    func testSubagentFilesAreInvisibleToEnumeration() async throws {
+        // Depth-2 invariant (4b finding 14): nested agent transcripts must
+        // never surface as sessions. Guard-tested so a future enumeration
+        // change can't silently pollute the sidebar.
+        try makeSubagentTree(writeMeta: false)
+        let store = SessionStore(projectsRoot: root)
+        let project0 = try await store.projects()[0]
+        let sessions = try await store.sessions(in: project0)
+        XCTAssertEqual(sessions.map(\.id), ["aaaa-1111"],
+                       "the nested agent file must not enumerate")
+    }
+
+    func testSubagentTimelinesReadByToolUseID() async throws {
+        // Same tree as above, plus the meta.json linking file → Task card.
+        try makeSubagentTree(writeMeta: true)
+        let store = SessionStore(projectsRoot: root)
+        let project0 = try await store.projects()[0]
+        let summary = try await store.sessions(in: project0)[0]
+        let timelines = try await store.subagentTranscripts(for: summary)
+        XCTAssertEqual(Array(timelines.keys), ["toolu_XYZ"])
+        XCTAssertFalse(timelines["toolu_XYZ"]!.isEmpty)
+    }
 }

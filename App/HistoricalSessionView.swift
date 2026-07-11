@@ -9,10 +9,24 @@ struct HistoricalSessionView: View {
     @State private var inspectedID: String?
     @State private var isInspectorPresented = false
     @State private var expandedGroups: Set<String> = []
+    /// On-disk subagent sub-timelines keyed by parent Task tool_use id — the
+    /// historical analog of ChatSession.subagentTimelines (4b Task 14).
+    @State private var subagentTimelines: [String: [TimelineItem]] = [:]
+    /// Drill-down trail, mirroring ConversationView: a click that switches the
+    /// panel pushes the old selection; the panel's Back button pops it. Ben
+    /// asked for the same browser-like Back on the live side (2026-07-10).
+    @State private var inspectBackStack: [String] = []
 
+    /// Resolves the inspected id against the main timeline AND all subagent
+    /// sub-timelines (drilled-in sub rows are inspectable too — mirrors
+    /// ConversationView).
     private var inspectedItem: TimelineItem? {
         guard let inspectedID else { return nil }
-        return (items ?? []).first(where: { $0.id == inspectedID })
+        if let item = (items ?? []).first(where: { $0.id == inspectedID }) { return item }
+        for timeline in subagentTimelines.values {
+            if let item = timeline.first(where: { $0.id == inspectedID }) { return item }
+        }
+        return nil
     }
 
     /// One action for the transcript rows and the inspector's sub-rows.
@@ -24,6 +38,9 @@ struct HistoricalSessionView: View {
     /// note in TimelineItemViews.swift for WHY that matters).
     private var inspectAction: InspectItemAction {
         InspectItemAction(id: "historical-\(summary.id)") { id in
+            if let current = inspectedID, current != id {
+                inspectBackStack.append(current)
+            }
             inspectedID = id
             isInspectorPresented = true
         }
@@ -47,7 +64,9 @@ struct HistoricalSessionView: View {
                             ForEach(TimelineDisplay.grouped(items)) { row in
                                 switch row {
                                 case .item(let item):
-                                    TimelineItemView(item: item, session: nil)
+                                    TimelineItemView(item: item,
+                                                     subagentSteps: item.toolCallID
+                                                         .flatMap { subagentTimelines[$0]?.count })
                                 case .toolGroup(let id, let groupItems, let summary):
                                     ToolGroupRow(
                                         id: id, items: groupItems, summary: summary,
@@ -83,10 +102,19 @@ struct HistoricalSessionView: View {
             // Threaded in explicitly — presented inspector content does not
             // inherit the transcript's `.environment(\.inspectItem)`.
             InspectorPanel(item: inspectedItem,
-                           subagentItems: nil,
+                           subagentItems: inspectedID.flatMap { subagentTimelines[$0] },
                            inspectItem: inspectAction,
-                           inspectedID: $inspectedID)
+                           inspectedID: $inspectedID,
+                           onBack: inspectBackStack.isEmpty ? nil : {
+                               inspectedID = inspectBackStack.popLast()
+                           })
                 .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
+        }
+        // Clearing the selection (the panel's ✕) ends the trail; ⌥⌘I only
+        // toggles presentation and preserves selection + trail (mirrors
+        // ConversationView's two-affordance split).
+        .onChange(of: inspectedID) { _, new in
+            if new == nil { inspectBackStack.removeAll() }
         }
         .toolbar {
             ToolbarItemGroup {
@@ -110,11 +138,20 @@ struct HistoricalSessionView: View {
             let requested = summary.id
             items = nil
             expandedGroups.removeAll()
+            // A stale trail must never walk Back into another summary's items.
+            subagentTimelines = [:]
+            inspectBackStack = []
             let loaded = await app.historicalTimeline(for: summary)
             // Rapid switching: a slow load must not land on a newer selection
             // (FOLLOWUPS stale-assignment window).
             guard !Task.isCancelled, requested == summary.id else { return }
             items = loaded
+            // Drill-down data loads AFTER the main items, same race guard: the
+            // on-disk read is heavier, and rows work without it (chips just
+            // stay absent until it lands).
+            let subs = await app.historicalSubagentTimelines(for: summary)
+            guard !Task.isCancelled, requested == summary.id else { return }
+            subagentTimelines = subs
         }
     }
 }

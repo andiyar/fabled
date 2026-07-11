@@ -2,10 +2,14 @@ import SwiftUI
 import ClaudeKit
 import FabledCore
 
-/// One timeline row. `session` is nil in read-only history.
+/// One timeline row. `subagentSteps` is the routed sub-item count for
+/// Task/Agent rows (live: ChatSession.subagentTimelines; historical: the
+/// on-disk read) — passing the COUNT instead of the session decouples rows
+/// from live-session observation (T11 4a review note) and lets history
+/// share the exact same row.
 struct TimelineItemView: View {
     let item: TimelineItem
-    let session: ChatSession?
+    var subagentSteps: Int? = nil
 
     var body: some View {
         switch item {
@@ -14,13 +18,9 @@ struct TimelineItemView: View {
         case .assistantText(_, let markdown, let isStreaming):
             AssistantTextView(markdown: markdown, isStreaming: isStreaming)
         case .toolCall(let id, let name, let summary, let input, let result, let isError, let isRunning):
-            // Reads the whole subagentTimelines property (Observation tracks
-            // per stored property), so every visible tool row re-renders per
-            // parented event — bounded by LazyVStack's visible rows; revisit
-            // if a busy subagent janks the transcript (T11 review).
             ToolCallCard(id: id, name: name, summary: summary, input: input,
                          result: result, isError: isError, isRunning: isRunning,
-                         subagentSteps: session?.subagentTimelines[id]?.count)
+                         subagentSteps: subagentSteps)
         case .thinking(let id, let text, let isStreaming):
             ThinkingItemView(id: id, text: text, isStreaming: isStreaming)
         case .permission(_, let request, let resolution):
@@ -90,7 +90,11 @@ struct ToolCallCard: View {
         HStack(spacing: 6) {
             ToolStatusIcon(isError: isError, isRunning: isRunning)
             Text(name).fontWeight(.medium)
-            Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            // Suppress the redundant summary when it just echoes the tool name
+            // (Agent calls summarize to their own name → "Agent Agent"; FOLLOWUPS).
+            if summary != name {
+                Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            }
             Spacer(minLength: 4)
             if let subagentSteps, subagentSteps > 0 {
                 Text(subagentSteps == 1 ? "1 step" : "\(subagentSteps) steps")
@@ -242,10 +246,9 @@ struct ToolGroupRow: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: Theme.spaceS) {
                     // Grouped runs never contain Task/Agent rows (anchors are
-                    // excluded from grouping), so no subagent plumbing here.
-                    // T14's signature sweep updates this call site.
+                    // excluded from grouping), so no subagent counts here.
                     ForEach(items) { item in
-                        TimelineItemView(item: item, session: nil)
+                        TimelineItemView(item: item)
                     }
                 }
                 .padding(.leading, Theme.spaceL)
