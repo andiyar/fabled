@@ -6,7 +6,8 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Fabled")
-                .font(.system(.largeTitle, design: .serif))
+                .font(Theme.display)
+                .foregroundStyle(Theme.bronze)
             Text("Native Claude Code for the Mac")
                 .foregroundStyle(.secondary)
             Button("New Session…", action: newSession)
