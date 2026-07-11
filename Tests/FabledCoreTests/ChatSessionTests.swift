@@ -456,4 +456,17 @@ final class ChatSessionTests: XCTestCase {
         """#)
         await waitUntil("reset") { session.thinkingTokens == nil }
     }
+
+    func testTaskToolTrafficFeedsSessionTasks() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"assistant","message":{"role":"assistant","model":"m","content":[{"type":"tool_use","id":"toolu_1","name":"TaskCreate","input":{"subject":"Alpha task","description":"d","activeForm":"Alpha running"}}]},"session_id":"s","uuid":"a1"}
+        """#)
+        try yield(continuation, #"""
+        {"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":"Task #1 created successfully: Alpha task"}]},"session_id":"s","uuid":"u1","tool_use_result":{"task":{"id":"1","subject":"Alpha task"}}}
+        """#)
+        await waitUntil("task") { !session.sessionTasks.isEmpty }
+        XCTAssertEqual(session.sessionTasks[0].taskID, "1")
+        XCTAssertEqual(session.sessionTasks[0].subject, "Alpha task")
+    }
 }

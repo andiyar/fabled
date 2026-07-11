@@ -218,4 +218,20 @@ final class TimelineReplayTests: XCTestCase {
         XCTAssertTrue(thinking.allSatisfy { $0 == false },
                       "every thinking item finalizes by end of fixture")
     }
+
+    @MainActor
+    func testTasktoolsFixtureFoldsToFinalChecklist() async throws {
+        let (connection, continuation, _) = makeFakeConnection()
+        let session = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"))
+        session.begin()
+        for event in try CoreFixtures.events("2026-07-11-tasktools.jsonl") {
+            continuation.yield(event)
+        }
+        // Probe script: Alpha completed, Beta pending, Gamma deleted.
+        await waitUntil("fold") { session.sessionTasks.count == 2 }
+        XCTAssertEqual(session.sessionTasks.map(\.subject), ["Alpha task", "Beta task"])
+        XCTAssertEqual(session.sessionTasks.map(\.status), [.completed, .pending])
+    }
 }

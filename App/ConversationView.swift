@@ -113,11 +113,14 @@ struct ConversationView: View {
                 }
                 .defaultScrollAnchor(.bottom)
             }
-            if !session.todos.isEmpty {
-                TodoChecklistView(todos: session.todos)
+            let checklistRows = session.sessionTasks.isEmpty
+                ? session.todos.map(\.checklistRow)
+                : session.sessionTasks.map(\.checklistRow)
+            if !checklistRows.isEmpty {
+                TodoChecklistView(rows: checklistRows)
                     // Session-scoped identity: RootView reuses this view across
-                    // live-session switches, so without it the collapse @State
-                    // leaks between sessions (T10 quality review).
+                    // live-session switches (T10 quality review; removed in T15
+                    // when the whole hierarchy gets session identity).
                     .id(session.id)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)

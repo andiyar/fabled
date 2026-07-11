@@ -40,6 +40,11 @@ public final class ChatSession: Identifiable {
     public private(set) var versionNote: String?
     /// Latest TodoWrite list — the CLI re-sends the whole list per call.
     public private(set) var todos: [TodoItem] = []
+    /// Task-tool checklist (TaskCreate/TaskUpdate/TaskList) — the live
+    /// replacement for TodoWrite on 2.1.206 (probe finding 9). The card
+    /// renders whichever of tasks/todos is non-empty, tasks winning.
+    public private(set) var taskChecklist = TaskChecklist()
+    public var sessionTasks: [TaskItem] { taskChecklist.items }
     /// Subagent traffic grouped by the spawning Task's tool_use id,
     /// reduced through the same TimelineReducer vocabulary.
     public private(set) var subagentTimelines: [String: [TimelineItem]] = [:]
@@ -354,14 +359,19 @@ public final class ChatSession: Identifiable {
             }
         case .assistant(let message):
             for block in message.content {
-                if case .toolUse(_, "TodoWrite", let input) = block {
-                    let parsed = TodoItem.list(from: input)
-                    // Deliberate: an empty list never clears. The CLI re-sends
-                    // the complete list on every call, so an empty todos array
-                    // is a malformed write, not a reset (T5 review; test-pinned).
-                    if !parsed.isEmpty { todos = parsed }
+                if case .toolUse(let id, let name, let input) = block {
+                    taskChecklist.noteToolUse(id: id, name: name, input: input)
+                    if name == "TodoWrite" {
+                        let parsed = TodoItem.list(from: input)
+                        // Deliberate: an empty list never clears. The CLI re-sends
+                        // the complete list on every call, so an empty todos array
+                        // is a malformed write, not a reset (T5 review; test-pinned).
+                        if !parsed.isEmpty { todos = parsed }
+                    }
                 }
             }
+        case .toolResult(let results, _):
+            for result in results { taskChecklist.noteResult(result) }
         default:
             break
         }
