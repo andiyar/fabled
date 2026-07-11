@@ -11,6 +11,7 @@ struct ConversationView: View {
     /// case — Ben, 2026-07-10 live smoke — but the trail is deliberately
     /// browser-like across plain row clicks too).
     @State private var inspectBackStack: [String] = []
+    @State private var expandedGroups: Set<String> = []
 
     /// Resolves the inspected id against the main timeline and all subagent
     /// sub-timelines (sub rows are inspectable too — Task 11).
@@ -84,8 +85,22 @@ struct ConversationView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 48)
                         }
-                        ForEach(session.timeline) { item in
-                            TimelineItemView(item: item, session: session)
+                        ForEach(TimelineDisplay.grouped(session.timeline)) { row in
+                            switch row {
+                            case .item(let item):
+                                TimelineItemView(item: item, session: session)
+                            case .toolGroup(let id, let items, let summary):
+                                ToolGroupRow(
+                                    id: id, items: items, summary: summary,
+                                    isExpanded: expandedGroups.contains(id),
+                                    toggle: {
+                                        if expandedGroups.contains(id) {
+                                            expandedGroups.remove(id)
+                                        } else {
+                                            expandedGroups.insert(id)
+                                        }
+                                    })
+                            }
                         }
                         if session.isWorking {
                             StreamStatusRow(session: session)
@@ -147,6 +162,7 @@ struct ConversationView: View {
         .onChange(of: session.id) { _, _ in
             inspectedID = nil
             inspectBackStack.removeAll()
+            expandedGroups.removeAll()
         }
         .toolbar {
             ToolbarItemGroup {

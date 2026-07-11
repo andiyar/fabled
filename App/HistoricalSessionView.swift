@@ -8,6 +8,7 @@ struct HistoricalSessionView: View {
     @State private var items: [TimelineItem]?
     @State private var inspectedID: String?
     @State private var isInspectorPresented = false
+    @State private var expandedGroups: Set<String> = []
 
     private var inspectedItem: TimelineItem? {
         guard let inspectedID else { return nil }
@@ -43,8 +44,22 @@ struct HistoricalSessionView: View {
                 GeometryReader { geo in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(items) { item in
-                                TimelineItemView(item: item, session: nil)
+                            ForEach(TimelineDisplay.grouped(items)) { row in
+                                switch row {
+                                case .item(let item):
+                                    TimelineItemView(item: item, session: nil)
+                                case .toolGroup(let id, let groupItems, let summary):
+                                    ToolGroupRow(
+                                        id: id, items: groupItems, summary: summary,
+                                        isExpanded: expandedGroups.contains(id),
+                                        toggle: {
+                                            if expandedGroups.contains(id) {
+                                                expandedGroups.remove(id)
+                                            } else {
+                                                expandedGroups.insert(id)
+                                            }
+                                        })
+                                }
                             }
                         }
                         .padding()
@@ -94,6 +109,7 @@ struct HistoricalSessionView: View {
         .task(id: summary.id) {
             let requested = summary.id
             items = nil
+            expandedGroups.removeAll()
             let loaded = await app.historicalTimeline(for: summary)
             // Rapid switching: a slow load must not land on a newer selection
             // (FOLLOWUPS stale-assignment window).

@@ -206,3 +206,50 @@ struct RawEventView: View {
         .help("Show raw event in the inspector")
     }
 }
+
+/// Collapsed tool-run row (digest §2a). Expansion state lives on the
+/// container (expandedGroups set) — never per-row @State (4a scar).
+struct ToolGroupRow: View {
+    let id: String
+    let items: [TimelineItem]
+    let summary: String
+    let isExpanded: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.spaceS) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                Text(summary).fontWeight(.medium)
+                Text("\(items.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+                Spacer(minLength: 4)
+            }
+            .font(.callout)
+            .padding(Theme.spaceS)
+            .background(.quinary, in: RoundedRectangle(cornerRadius: Theme.radiusCard))
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(Theme.snap) { toggle() } }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("\(summary), \(isExpanded ? "expanded" : "collapsed")")
+            .help(isExpanded ? "Collapse this run" : "Expand \(items.count) steps")
+            if isExpanded {
+                VStack(alignment: .leading, spacing: Theme.spaceS) {
+                    // Grouped runs never contain Task/Agent rows (anchors are
+                    // excluded from grouping), so no subagent plumbing here.
+                    // T14's signature sweep updates this call site.
+                    ForEach(items) { item in
+                        TimelineItemView(item: item, session: nil)
+                    }
+                }
+                .padding(.leading, Theme.spaceL)
+            }
+        }
+    }
+}

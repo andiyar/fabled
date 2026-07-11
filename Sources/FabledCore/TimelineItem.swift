@@ -30,7 +30,7 @@ public enum TimelineItem: Sendable, Identifiable, Equatable {
     }
 
     /// Non-nil for tool calls — the reducer's result-matching key.
-    var toolCallID: String? {
+    public var toolCallID: String? {
         if case .toolCall(let id, _, _, _, _, _, _) = self { return id }
         return nil
     }
