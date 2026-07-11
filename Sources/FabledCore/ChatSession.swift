@@ -13,6 +13,10 @@ public final class ChatSession: Identifiable {
 
     public let id = UUID()
     public let workingDirectory: URL
+    /// The on-disk session id this live session resumed, if any (set at
+    /// launch for --resume spawns; nil for fresh sessions). Task 12 uses it
+    /// to enforce one live process per session id.
+    public let resumedSessionID: String?
 
     public private(set) var timeline: [TimelineItem] = []
     public private(set) var pendingGates: [InteractionGate] = []
@@ -75,13 +79,14 @@ public final class ChatSession: Identifiable {
 
     public init(connection: AgentConnection, workingDirectory: URL,
                 permissionMode: String = "default", model: String? = nil,
-                effort: String? = nil) {
+                effort: String? = nil, resumedSessionID: String? = nil) {
         self.connection = connection
         self.workingDirectory = workingDirectory
         self.permissionMode = permissionMode
         self.currentModel = model
         self.modelExplicitlyChosen = model != nil
         self.currentEffort = effort
+        self.resumedSessionID = resumedSessionID
     }
 
     /// Ready, but the CLI is holding `system init` (and all other output)
@@ -122,7 +127,8 @@ public final class ChatSession: Identifiable {
             workingDirectory: configuration.workingDirectory,
             permissionMode: configuration.permissionMode ?? "default",
             model: configuration.model,
-            effort: configuration.effort)
+            effort: configuration.effort,
+            resumedSessionID: configuration.forkSession ? nil : configuration.resumeSessionID)
         if let executable = configuration.executable {
             session.noteDiskVersion(
                 SessionConfiguration.resolveClaudeVersion(executable: executable))

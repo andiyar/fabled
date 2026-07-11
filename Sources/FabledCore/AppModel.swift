@@ -148,6 +148,23 @@ public final class AppModel {
         return searchHits.first { $0.session.id == id }?.session
     }
 
+    /// Welcome inbox recents: newest sessions across ALL projects (the
+    /// sidebar groups; the welcome screen interleaves), excluding sessions
+    /// currently attached to a live ChatSession (those render in the live
+    /// sections above).
+    public func welcomeRecents(limit: Int) -> [SessionSummary] {
+        let liveIDs = Set(liveSessions.compactMap(\.resumedSessionID))
+        var seen = Set<String>()
+        var result: [SessionSummary] = []
+        for group in history {
+            for summary in group.sessions where !liveIDs.contains(summary.id) {
+                if seen.insert(summary.id).inserted { result.append(summary) }
+            }
+        }
+        result.sort { $0.lastActivity > $1.lastActivity }
+        return Array(result.prefix(limit))
+    }
+
     // MARK: - Search
 
     private func scheduleSearch() {

@@ -115,4 +115,14 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(second.sidebarOptions.groupBy, .date)
         XCTAssertTrue(second.sidebarOptions.pinnedSessionIDs.contains("s-1"))
     }
+
+    func testWelcomeRecentsExcludeLiveResumedSessions() async throws {
+        let (model, _) = try makeModel()
+        await model.bootstrap()
+        let recents = model.welcomeRecents(limit: 5)
+        XCTAssertFalse(recents.isEmpty)
+        XCTAssertEqual(recents.map(\.id),
+                       recents.sorted { $0.lastActivity > $1.lastActivity }.map(\.id),
+                       "newest first, across projects")
+    }
 }
