@@ -56,20 +56,30 @@ public struct SlashCommand: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One entry of the initialize response's model catalog (probe finding 9).
+/// One entry of the initialize response's model catalog (probe finding 9;
+/// effort metadata probe finding 5, 2026-07-11).
 public struct ModelOption: Sendable, Equatable, Identifiable {
     public let value: String
     public let resolvedModel: String?
     public let displayName: String
     public let optionDescription: String?
+    /// Whether the model takes an effort level. Hand-maintained knownModels
+    /// entries claim true with an EMPTY levels list = "unknown, offer the
+    /// standard five"; only the live catalog states levels authoritatively.
+    public let supportsEffort: Bool
+    public let supportedEffortLevels: [String]
     public var id: String { value }
 
     public init(value: String, resolvedModel: String?,
-                displayName: String, optionDescription: String?) {
+                displayName: String, optionDescription: String?,
+                supportsEffort: Bool = true,
+                supportedEffortLevels: [String] = []) {
         self.value = value
         self.resolvedModel = resolvedModel
         self.displayName = displayName
         self.optionDescription = optionDescription
+        self.supportsEffort = supportsEffort
+        self.supportedEffortLevels = supportedEffortLevels
     }
 }
 

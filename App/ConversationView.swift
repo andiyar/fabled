@@ -160,6 +160,7 @@ struct ConversationView: View {
                         .help("Active model")
                 }
                 ModelPickerMenu(session: session)
+                EffortPickerMenu(session: session)
                 Picker("Permissions", selection: Binding(
                     get: { session.permissionMode },
                     set: { session.setPermissionMode($0) }

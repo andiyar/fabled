@@ -358,4 +358,61 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertFalse(session.isThinking,
                        "subagent stream state must not drive the parent spinner")
     }
+
+    func testCatalogHarvestsEffortMetadata() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"commands":[],"models":[{"value":"default","resolvedModel":"claude-opus-4-8[1m]","displayName":"Default (recommended)","supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max"]},{"value":"haiku","displayName":"Haiku","supportsEffort":false}]}}}
+        """#)
+        await waitUntil("catalog") { !session.models.isEmpty }
+        XCTAssertTrue(session.models[0].supportsEffort)
+        XCTAssertEqual(session.models[0].supportedEffortLevels,
+                       ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertFalse(session.models[1].supportsEffort)
+        XCTAssertEqual(session.models[1].supportedEffortLevels, [])
+    }
+
+    func testSetEffortSendsSlashCommandAndSetsState() async throws {
+        let (session, continuation, recorder) = makeSession()
+        _ = continuation
+        session.setEffort("medium")
+        XCTAssertEqual(session.currentEffort, "medium")
+        let entries = await waitForEntries(recorder, count: 1)
+        XCTAssertEqual(entries, [.send("/effort medium")])
+        // The local echo appears in the timeline like any user message.
+        XCTAssertTrue(session.timeline.contains {
+            if case .userMessage(_, "/effort medium") = $0 { return true }
+            return false
+        })
+    }
+
+    func testSyntheticSlashResultPreservesPendingGates() async throws {
+        let (session, continuation, _) = makeSession()
+        // A pending permission gate…
+        try yield(continuation, #"""
+        {"type":"control_request","request_id":"perm-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}
+        """#)
+        await waitUntil("gate") { session.pendingGate != nil }
+        // …must survive a synthetic slash-command result (num_turns == 0,
+        // probe finding 12)…
+        try yield(continuation, #"""
+        {"type":"result","subtype":"success","is_error":false,"num_turns":0,"duration_ms":1,"result":"Set effort level to medium (this session only)","session_id":"s"}
+        """#)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNotNil(session.pendingGate, "slash result must not clear gates")
+        // …and still be cleared by a real turn's result (4a abort semantics).
+        try yield(continuation, #"""
+        {"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":3,"duration_ms":100,"session_id":"s"}
+        """#)
+        await waitUntil("gate cleared") { session.pendingGate == nil }
+    }
+
+    func testLaunchEffortSeedsCurrentEffort() {
+        let (connection, _, _) = makeFakeConnection()
+        let session = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"),
+            effort: "medium")
+        XCTAssertEqual(session.currentEffort, "medium")
+    }
 }

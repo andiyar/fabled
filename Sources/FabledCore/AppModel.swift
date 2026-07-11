@@ -19,6 +19,15 @@ public final class AppModel {
     /// The New Session folder picker (menu ⌘N, welcome button) presents
     /// when this flips true; RootView owns the fileImporter.
     public var isPickingFolder = false
+    /// Effort applied to every new spawn via --effort (what Claude Desktop
+    /// does). Persisted; nil = CLI default. Session-scoped changes go through
+    /// ChatSession.setEffort and don't touch this.
+    public var preferredEffort: String? {
+        didSet {
+            UserDefaults.standard.set(preferredEffort, forKey: Self.preferredEffortKey)
+        }
+    }
+    private static let preferredEffortKey = "preferredEffort"
     public var searchQuery = "" {
         didSet { if searchQuery != oldValue { scheduleSearch() } }
     }
@@ -44,6 +53,7 @@ public final class AppModel {
                                         in: .userDomainMask)[0]
                 .appendingPathComponent("Fabled/index.sqlite")
         self.index = try SearchIndex(databaseURL: dbURL, store: store)
+        self.preferredEffort = UserDefaults.standard.string(forKey: Self.preferredEffortKey)
     }
 
     // No deinit: Swift 6.0 forbids a nonisolated deinit from touching the
@@ -128,6 +138,7 @@ public final class AppModel {
     public func newSession(at directory: URL, model: String? = nil) async {
         var configuration = SessionConfiguration(workingDirectory: directory)
         configuration.model = model
+        configuration.effort = preferredEffort
         await launch(configuration, seed: [])
     }
 
@@ -139,6 +150,7 @@ public final class AppModel {
             workingDirectory: workingDirectory(for: summary))
         configuration.resumeSessionID = summary.id
         configuration.forkSession = fork
+        configuration.effort = preferredEffort
         await launch(configuration, seed: seed)
     }
 

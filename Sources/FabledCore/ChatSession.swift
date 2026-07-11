@@ -9,7 +9,7 @@ import os
 @Observable
 public final class ChatSession: Identifiable {
     /// CLI version the current fixtures were recorded against.
-    public static let testedCLIVersion = "2.1.205"
+    public static let testedCLIVersion = "2.1.206"
 
     public let id = UUID()
     public let workingDirectory: URL
@@ -23,6 +23,10 @@ public final class ChatSession: Identifiable {
     public private(set) var commands: [SlashCommand] = []
     public private(set) var models: [ModelOption] = []
     public private(set) var currentModel: String?
+    /// Session effort level: the spawn --effort value, then whatever the
+    /// user last picked (sent as the CLI's own /effort command). nil = CLI
+    /// default, never overridden from the wire (the CLI doesn't report it).
+    public private(set) var currentEffort: String?
     public private(set) var permissionMode: String
     public private(set) var cumulativeCostUSD = 0.0
     public private(set) var lastUsage: JSONValue?
@@ -50,12 +54,14 @@ public final class ChatSession: Identifiable {
     private var modelExplicitlyChosen: Bool
 
     public init(connection: AgentConnection, workingDirectory: URL,
-                permissionMode: String = "default", model: String? = nil) {
+                permissionMode: String = "default", model: String? = nil,
+                effort: String? = nil) {
         self.connection = connection
         self.workingDirectory = workingDirectory
         self.permissionMode = permissionMode
         self.currentModel = model
         self.modelExplicitlyChosen = model != nil
+        self.currentEffort = effort
     }
 
     /// Ready, but the CLI is holding `system init` (and all other output)
@@ -95,7 +101,8 @@ public final class ChatSession: Identifiable {
             connection: .live(agent),
             workingDirectory: configuration.workingDirectory,
             permissionMode: configuration.permissionMode ?? "default",
-            model: configuration.model)
+            model: configuration.model,
+            effort: configuration.effort)
         if let executable = configuration.executable {
             session.noteDiskVersion(
                 SessionConfiguration.resolveClaudeVersion(executable: executable))
@@ -199,6 +206,14 @@ public final class ChatSession: Identifiable {
         Task { await connection.setPermissionMode(mode) }
     }
 
+    /// Sends the CLI's own /effort command as user text (probe finding 2):
+    /// zero API cost, the CLI replies with a synthetic assistant message
+    /// narrating the change, and the result carries num_turns == 0.
+    public func setEffort(_ level: String) {
+        currentEffort = level
+        send("/effort \(level)")
+    }
+
     public func terminate() {
         consumeTask?.cancel()
         Task { await connection.terminate() }
@@ -282,7 +297,12 @@ public final class ChatSession: Identifiable {
             // An aborted turn (interrupt → error_during_execution) abandons any
             // open permission gate — the CLI is no longer waiting for a decision.
             // On normal completion the list is already empty, so this is a no-op.
-            pendingGates.removeAll()
+            // EXCEPT synthetic slash-command results (num_turns == 0, probe
+            // finding 12): those never close a real turn, and a gate pending
+            // while one arrives is still live on the CLI side.
+            if turn.raw["num_turns"]?.doubleValue != 0 {
+                pendingGates.removeAll()
+            }
             cumulativeCostUSD += turn.totalCostUSD ?? 0
             lastUsage = turn.usage
         case .streamEvent(let stream):
@@ -344,7 +364,10 @@ public final class ChatSession: Identifiable {
                 value: value,
                 resolvedModel: entry["resolvedModel"]?.stringValue,
                 displayName: entry["displayName"]?.stringValue ?? value,
-                optionDescription: entry["description"]?.stringValue)
+                optionDescription: entry["description"]?.stringValue,
+                supportsEffort: entry["supportsEffort"]?.boolValue ?? false,
+                supportedEffortLevels: (entry["supportedEffortLevels"]?.arrayValue ?? [])
+                    .compactMap(\.stringValue))
         }
         // With init deferred to the first turn (2.1.205+), the catalog is the
         // only pre-turn source for what "default" resolves to — without this

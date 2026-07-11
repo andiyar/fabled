@@ -64,4 +64,13 @@ final class ModelOptionTests: XCTestCase {
         XCTAssertEqual(merged.map(\.value), ModelOption.knownModels.map(\.value))
         XCTAssertEqual(merged.count, 8)
     }
+
+    func testKnownModelsDefaultToUnknownEffortSupport() {
+        // Hand-maintained entries don't claim effort knowledge; the picker
+        // falls back to the standard five levels for them.
+        for option in ModelOption.knownModels {
+            XCTAssertTrue(option.supportsEffort)
+            XCTAssertEqual(option.supportedEffortLevels, [])
+        }
+    }
 }
