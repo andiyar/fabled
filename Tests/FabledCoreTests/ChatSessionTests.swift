@@ -141,9 +141,33 @@ final class ChatSessionTests: XCTestCase {
         try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.01,"uuid":"r1"}"#)
         await waitUntil("first result") { session.cumulativeCostUSD > 0 }
         XCTAssertTrue(session.isWorking, "one of two turns still in flight")
-        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.02,"uuid":"r2"}"#)
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.025,"uuid":"r2"}"#)
         await waitUntil("second result") { !session.isWorking }
-        XCTAssertEqual(session.cumulativeCostUSD, 0.03, accuracy: 0.0001)
+        // total_cost_usd is session-cumulative on the wire — assigned, not
+        // summed (0.035 here would mean double-counting).
+        XCTAssertEqual(session.cumulativeCostUSD, 0.025, accuracy: 0.0001)
+    }
+
+    func testCostTracksWireCumulative() async throws {
+        let (session, continuation, _) = makeSession()
+        // total_cost_usd is SESSION-CUMULATIVE on the wire (slashfx +
+        // control-ops fixtures, 2026-07-11): assign, never sum.
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0.01,"usage":{"input_tokens":100},"uuid":"r1"}"#)
+        await waitUntil("first result") { session.cumulativeCostUSD > 0 }
+        XCTAssertEqual(session.cumulativeCostUSD, 0.01, accuracy: 0.0001)
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0.025,"usage":{"input_tokens":250},"uuid":"r2"}"#)
+        await waitUntil("second result") { session.cumulativeCostUSD > 0.02 }
+        XCTAssertEqual(session.cumulativeCostUSD, 0.025, accuracy: 0.0001,
+                       "cumulative wire value assigned, not summed (0.035 = double-count)")
+        XCTAssertEqual(session.lastUsage?["input_tokens"]?.doubleValue, 250)
+        // A synthetic slash result (num_turns 0) echoes the cumulative cost
+        // unchanged and carries all-zeros usage — neither may clobber state.
+        try yield(continuation, #"{"type":"result","subtype":"success","is_error":false,"num_turns":0,"total_cost_usd":0.025,"usage":{"input_tokens":0},"uuid":"r3"}"#)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(session.cumulativeCostUSD, 0.025, accuracy: 0.0001,
+                       "synthetic echo leaves the cumulative value unchanged")
+        XCTAssertEqual(session.lastUsage?["input_tokens"]?.doubleValue, 250,
+                       "synthetic all-zeros usage must not overwrite the real turn's")
     }
 
     func testPermissionFlow() async throws {

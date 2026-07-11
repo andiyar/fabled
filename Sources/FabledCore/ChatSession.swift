@@ -207,9 +207,12 @@ public final class ChatSession: Identifiable {
     }
 
     /// Sends the CLI's own /effort command as user text (probe finding 2):
-    /// zero API cost, the CLI replies with a synthetic assistant message
-    /// narrating the change, and the result carries num_turns == 0.
+    /// costs no NEW API spend (duration_api_ms 0; the result echoes
+    /// session-cumulative accounting), the CLI replies with a synthetic
+    /// assistant message narrating the change, and the result carries
+    /// num_turns == 0.
     public func setEffort(_ level: String) {
+        guard !hasEnded else { return }
         currentEffort = level
         send("/effort \(level)")
     }
@@ -303,8 +306,14 @@ public final class ChatSession: Identifiable {
             if turn.raw["num_turns"]?.doubleValue != 0 {
                 pendingGates.removeAll()
             }
-            cumulativeCostUSD += turn.totalCostUSD ?? 0
-            lastUsage = turn.usage
+            // total_cost_usd is SESSION-CUMULATIVE on the wire (fixtures:
+            // slashfx + control-ops show monotonic growth; synthetic slash
+            // results echo it unchanged) — assign, don't sum. The += here
+            // double-counted since Plan 3.
+            if let cost = turn.totalCostUSD { cumulativeCostUSD = cost }
+            if turn.raw["num_turns"]?.doubleValue != 0 {
+                lastUsage = turn.usage   // synthetic results carry all-zeros usage
+            }
         case .streamEvent(let stream):
             switch stream.kind {
             case .thinkingDelta: isThinking = true

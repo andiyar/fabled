@@ -13,13 +13,16 @@ struct EffortPickerMenu: View {
     let session: ChatSession
     static let fallbackLevels = ["low", "medium", "high", "xhigh", "max"]
 
-    private var levels: [String] {
+    /// nil = the current model matched a catalog entry that declares
+    /// supportsEffort == false — effort is genuinely unavailable, not merely
+    /// unknown. Unknown (no catalog match) falls back to the standard five.
+    private var levels: [String]? {
         guard let current = session.currentModel,
               let match = session.models.first(where: {
                   $0.value == current || $0.resolvedModel == current
-              }),
-              match.supportsEffort
+              })
         else { return Self.fallbackLevels }
+        guard match.supportsEffort else { return nil }
         return match.supportedEffortLevels.isEmpty
             ? Self.fallbackLevels : match.supportedEffortLevels
     }
@@ -27,10 +30,16 @@ struct EffortPickerMenu: View {
     var body: some View {
         Menu {
             Section("This session") {
-                ForEach(levels, id: \.self) { level in
-                    optionButton(level, title: level.capitalized)
+                if let levels {
+                    ForEach(levels, id: \.self) { level in
+                        optionButton(level, title: level.capitalized)
+                    }
+                    if !levels.contains("auto") {
+                        optionButton("auto", title: "Auto")
+                    }
+                } else {
+                    Text("Not supported by this model")
                 }
-                optionButton("auto", title: "Auto")
             }
             .disabled(session.pendingGate != nil || session.hasEnded)
             Section("New sessions") {
