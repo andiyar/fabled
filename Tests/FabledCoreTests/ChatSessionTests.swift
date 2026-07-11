@@ -226,6 +226,22 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertFalse(session.isWorking)
     }
 
+    func testTerminatedAbandonsPendingGates() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git init"},"permission_suggestions":[]}}
+        """#)
+        await waitUntil("pending permission") { session.pendingGate != nil }
+
+        // A dead CLI can no longer consume a decision — the gate must not
+        // ghost-count in the dock badge or render a dead interactive card.
+        continuation.yield(.terminated(exitCode: 1))
+        continuation.finish()
+        await waitUntil("gate abandoned") { session.pendingGate == nil }
+        XCTAssertTrue(session.pendingGates.isEmpty)
+        XCTAssertEqual(session.activityState, .ended)
+    }
+
     func testTerminatedBeforeInitSurfacesLoudBanner() async throws {
         let (session, continuation, _) = makeSession()
         // Child dies with 127 (env exit) before any `system init` arrived.

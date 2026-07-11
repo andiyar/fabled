@@ -158,7 +158,11 @@ public final class AppModel {
     /// currently attached to a live ChatSession (those render in the live
     /// sections above).
     public func welcomeRecents(limit: Int) -> [SessionSummary] {
+        // Resumed OR fresh: a fresh session's own transcript is indexed while
+        // it runs (watcher reindex), and it already renders in the live
+        // sections above — it must not double up here.
         let liveIDs = Set(liveSessions.compactMap(\.resumedSessionID))
+            .union(liveSessions.compactMap(\.info?.sessionID))
         var seen = Set<String>()
         var result: [SessionSummary] = []
         for group in history {
@@ -218,9 +222,13 @@ public final class AppModel {
     /// timeline is seeded from the on-disk transcript. Continue reattaches
     /// the SAME session id, so a second live process on that id is forbidden
     /// (one-process invariant): an existing attachment is selected instead.
+    /// The guard matches resumed OR fresh — a fresh session's own transcript
+    /// is indexed while it runs, so Continue on its history row must select
+    /// the live process, not spawn a second one on the same id.
     public func resume(_ summary: SessionSummary, fork: Bool) async {
         if !fork, let existing = liveSessions.first(
-            where: { $0.resumedSessionID == summary.id }) {
+            where: { $0.resumedSessionID == summary.id
+                || $0.info?.sessionID == summary.id }) {
             selection = .live(existing.id)
             return
         }

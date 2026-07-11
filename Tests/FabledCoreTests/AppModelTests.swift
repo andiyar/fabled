@@ -174,6 +174,36 @@ final class AppModelTests: XCTestCase {
     }
 
     @MainActor
+    func testResumeCollisionCoversFreshSessions() async throws {
+        // A FRESH session (no resumedSessionID) writes its own transcript,
+        // which the watcher indexes within seconds — Continue on that history
+        // row must select the live process, not spawn a second one on the
+        // same id. `info.sessionID` arrives with the same first turn that
+        // creates the on-disk file, so coverage aligns.
+        let (model, _) = try makeModel()
+        let (connection, continuation, _) = makeFakeConnection()
+        let live = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"))
+        live.begin()
+        continuation.yield(try AgentEventDecoder.decode(Data(#"""
+        {"type":"system","subtype":"init","session_id":"abc-123","model":"m","cwd":"/tmp/demo","permissionMode":"default","tools":[],"slash_commands":[],"agents":[],"skills":[],"claude_code_version":"x"}
+        """#.utf8)))
+        await waitUntil("init") { live.info != nil }
+        model.adoptForTesting(live)
+        let summary = SessionSummary(
+            id: "abc-123",
+            project: ProjectFolder(flattenedName: "-tmp-demo",
+                                   originalPath: "/tmp/demo",
+                                   directoryURL: URL(fileURLWithPath: "/tmp/demo")),
+            fileURL: URL(fileURLWithPath: "/tmp/demo/abc-123.jsonl"),
+            title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        await model.resume(summary, fork: false)
+        XCTAssertEqual(model.liveSessions.count, 1, "no duplicate spawn")
+        XCTAssertEqual(model.selection, .live(live.id))
+    }
+
+    @MainActor
     func testFallbackDirectoryIsFlagged() throws {
         let (model, _) = try makeModel()
         let gone = SessionSummary(
