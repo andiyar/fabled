@@ -106,3 +106,6 @@ Deferred:
 ## From Plan 4b reviews (2026-07-11)
 
 - **resume() TOCTOU guard untested** — the in-flight `resumingSessionIDs` set closes the double-Continue race (T12 review), but testing it needs a launcher-injection seam on AppModel. → 4c if felt.
+- **Container-level subagentTimelines read — re-render scope unverified.** T14 moved the count read to the ForEach closure; if Observation attributes it to the container body, every parented event re-runs TimelineDisplay.grouped over the whole timeline. Verify with a re-render counter during a busy live subagent; memoize grouped() on timeline identity if confirmed. → 4c or first jank report.
+- **subagentTranscripts eagerly decodes all agent files on the store actor.** Lazy per-toolUseId read would decode only the clicked Task's file; consistent-with-precedent for now. → 4c if a 30-subagent session feels slow.
+- **Duplicate toolUseId across meta.json files is last-write-wins, order unspecified.** Probably unreachable (ids are unique); documented here rather than in code. → watch.

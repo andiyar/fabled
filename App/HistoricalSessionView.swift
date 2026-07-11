@@ -141,6 +141,10 @@ struct HistoricalSessionView: View {
             // A stale trail must never walk Back into another summary's items.
             subagentTimelines = [:]
             inspectBackStack = []
+            // Cross-summary fallback ids ("line-N") collide — mirror
+            // ConversationView's reset so a stale selection can't silently
+            // resolve to another summary's row.
+            inspectedID = nil
             let loaded = await app.historicalTimeline(for: summary)
             // Rapid switching: a slow load must not land on a newer selection
             // (FOLLOWUPS stale-assignment window).

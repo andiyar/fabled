@@ -186,4 +186,14 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(Array(timelines.keys), ["toolu_XYZ"])
         XCTAssertFalse(timelines["toolu_XYZ"]!.isEmpty)
     }
+
+    func testSubagentTranscriptsSkipMetalessFiles() async throws {
+        // Tolerant-skip contract: a jsonl with no sibling meta.json has no
+        // toolUseId key to route by — skipped silently, never a throw.
+        try makeSubagentTree(writeMeta: false)
+        let store = SessionStore(projectsRoot: root)
+        let summary = try await store.sessions(in: try await store.projects()[0])[0]
+        let timelines = try await store.subagentTranscripts(for: summary)
+        XCTAssertTrue(timelines.isEmpty, "meta-less agent file must be skipped, not fatal")
+    }
 }
