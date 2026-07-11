@@ -18,6 +18,19 @@ public final class ChatSession: Identifiable {
     /// to enforce one live process per session id.
     public let resumedSessionID: String?
 
+    /// Signals AppModel forwards to notification policy (4b feature 7).
+    /// Deliberately NOT an AsyncStream: one consumer, main-actor, fire-and-
+    /// forget — a closure keeps ordering trivial.
+    public enum NoteworthyEvent: Sendable, Equatable {
+        case gateArrived(summary: String)
+        case turnCompleted(detail: String, durationMS: Double)
+        case terminated(exitCode: Int32)
+    }
+    public var onNoteworthy: ((NoteworthyEvent) -> Void)?
+    /// Last post_turn_summary status_detail — ready-made notification body
+    /// (4a probe finding 8). Reset when its result consumes it.
+    private var lastStatusDetail = ""
+
     public private(set) var timeline: [TimelineItem] = []
     public private(set) var pendingGates: [InteractionGate] = []
     public var pendingGate: InteractionGate? { pendingGates.first }
@@ -378,6 +391,9 @@ public final class ChatSession: Identifiable {
                     pendingGates.append(.permission(permission))
                 }
             }
+            if let gate = pendingGates.last, gate.requestID == request.requestID {
+                onNoteworthy?(.gateArrived(summary: gate.summaryLine))
+            }
         case .result(let turn):
             turnsInFlight = max(0, turnsInFlight - 1)
             isWorking = turnsInFlight > 0
@@ -391,15 +407,18 @@ public final class ChatSession: Identifiable {
             // while one arrives is still live on the CLI side.
             if turn.raw["num_turns"]?.doubleValue != 0 {
                 pendingGates.removeAll()
+                lastUsage = turn.usage   // synthetic results carry all-zeros usage
+                // A real turn completed — hand the ready-made status_detail to
+                // the notification policy (4b feature 7), then consume it.
+                onNoteworthy?(.turnCompleted(
+                    detail: lastStatusDetail, durationMS: turn.durationMS ?? 0))
+                lastStatusDetail = ""
             }
             // total_cost_usd is SESSION-CUMULATIVE on the wire (fixtures:
             // slashfx + control-ops show monotonic growth; synthetic slash
             // results echo it unchanged) — assign, don't sum. The += here
             // double-counted since Plan 3.
             if let cost = turn.totalCostUSD { cumulativeCostUSD = cost }
-            if turn.raw["num_turns"]?.doubleValue != 0 {
-                lastUsage = turn.usage   // synthetic results carry all-zeros usage
-            }
         case .streamEvent(let stream):
             switch stream.kind {
             case .thinkingDelta: isThinking = true
@@ -422,6 +441,7 @@ public final class ChatSession: Identifiable {
                     + "Fabled looks in PATH, ~/.local/bin, ~/.claude/local, "
                     + "/opt/homebrew/bin, /usr/local/bin."
             }
+            onNoteworthy?(.terminated(exitCode: exitCode))
         case .system(let subtype, let raw):
             // Plan approval (and future mode changes) announce the new mode
             // via system/status (probe finding 5). set_permission_mode acks
@@ -433,6 +453,9 @@ public final class ChatSession: Identifiable {
             if subtype == "thinking_tokens",
                let estimated = raw["estimated_tokens"]?.doubleValue {
                 thinkingTokens = Int(estimated)
+            }
+            if subtype == "post_turn_summary" {
+                lastStatusDetail = raw["status_detail"]?.stringValue ?? ""
             }
         case .assistant(let message):
             for block in message.content {

@@ -585,4 +585,26 @@ final class ChatSessionTests: XCTestCase {
         }
         XCTAssertEqual(session.currentModel, "model-b")
     }
+
+    func testNoteworthyHookFiresForGateTurnAndTermination() async throws {
+        let (session, continuation, _) = makeSession()
+        var seen: [ChatSession.NoteworthyEvent] = []
+        session.onNoteworthy = { seen.append($0) }
+        try yield(continuation, #"""
+        {"type":"control_request","request_id":"p1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}
+        """#)
+        try yield(continuation, #"""
+        {"type":"system","subtype":"post_turn_summary","summarizes_uuid":"u","status_category":"review_ready","status_detail":"replied with READY-OK","needs_action":"","uuid":"pts","session_id":"s"}
+        """#)
+        try yield(continuation, #"""
+        {"type":"result","subtype":"success","is_error":false,"num_turns":1,"duration_ms":45000,"session_id":"s"}
+        """#)
+        await waitUntil("hook") { seen.count >= 2 }
+        guard case .gateArrived = seen[0] else { return XCTFail("expected gate, got \(seen)") }
+        guard case .turnCompleted(let detail, let duration) = seen[1] else {
+            return XCTFail("expected turn, got \(seen)")
+        }
+        XCTAssertEqual(detail, "replied with READY-OK")
+        XCTAssertEqual(duration, 45000)
+    }
 }

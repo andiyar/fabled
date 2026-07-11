@@ -11,6 +11,11 @@ public final class AppModel {
     public let index: SearchIndex
     private let defaults: UserDefaults
 
+    /// AppKit-side seams: is the app frontmost, and post a notification.
+    /// Injected by the app target at startup (FabledCore cannot import AppKit).
+    public var isAppActive: () -> Bool = { true }
+    public var postNotification: (LocalNotification) -> Void = { _ in }
+
     public private(set) var liveSessions: [ChatSession] = []
     public private(set) var history: [ProjectHistory] = []
     public private(set) var searchHits: [SearchHit] = []
@@ -226,6 +231,12 @@ public final class AppModel {
         if selection == .live(session.id) { selection = nil }
     }
 
+    /// Notification click: focus the session (feature 7).
+    public func focusSession(id: UUID) {
+        guard liveSessions.contains(where: { $0.id == id }) else { return }
+        selection = .live(id)
+    }
+
     /// Test seam: registers a live session without spawning a process.
     public func adoptForTesting(_ session: ChatSession) {
         liveSessions.append(session)
@@ -241,6 +252,15 @@ public final class AppModel {
             let session = try await ChatSession.launch(configuration: configuration)
             session.seed(timeline: seed)
             liveSessions.append(session)
+            session.onNoteworthy = { [weak self, weak session] event in
+                guard let self, let session else { return }
+                let selected = self.selection == .live(session.id)
+                if let note = NotificationPolicy.decide(
+                    event, sessionTitle: session.title, sessionID: session.id,
+                    isAppActive: self.isAppActive(), isSessionSelected: selected) {
+                    self.postNotification(note)
+                }
+            }
             selection = .live(session.id)
             launchError = nil
         } catch {
