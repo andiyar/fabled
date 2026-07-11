@@ -4,12 +4,13 @@ import ClaudeKit
 
 @MainActor
 final class AppModelTests: XCTestCase {
-    private func makeModel(pollInterval: Duration = .seconds(2)) throws -> (AppModel, URL) {
+    private func makeModel(pollInterval: Duration = .seconds(2),
+                           defaults: UserDefaults = .standard) throws -> (AppModel, URL) {
         let root = try CorpusBuilder.make()
         let store = SessionStore(projectsRoot: root, pollInterval: pollInterval)
         let db = FileManager.default.temporaryDirectory
             .appendingPathComponent("index-\(UUID().uuidString).sqlite")
-        let model = try AppModel(store: store, databaseURL: db)
+        let model = try AppModel(store: store, databaseURL: db, defaults: defaults)
         return (model, root)
     }
 
@@ -101,5 +102,17 @@ final class AppModelTests: XCTestCase {
             originalPath: "-gibberish--x",
             directoryURL: URL(fileURLWithPath: "/tmp")).displayName, "-gibberish--x",
             "unresolvable paths show the flattened name")
+    }
+
+    func testSidebarOptionsPersistAcrossModels() throws {
+        let suite = "4b-t8-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (first, _) = try makeModel(defaults: defaults)
+        first.sidebarOptions.groupBy = .date
+        first.sidebarOptions.pinnedSessionIDs.insert("s-1")
+        let (second, _) = try makeModel(defaults: defaults)
+        XCTAssertEqual(second.sidebarOptions.groupBy, .date)
+        XCTAssertTrue(second.sidebarOptions.pinnedSessionIDs.contains("s-1"))
     }
 }

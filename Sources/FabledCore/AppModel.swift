@@ -9,6 +9,7 @@ import Observation
 public final class AppModel {
     public let store: SessionStore
     public let index: SearchIndex
+    private let defaults: UserDefaults
 
     public private(set) var liveSessions: [ChatSession] = []
     public private(set) var history: [ProjectHistory] = []
@@ -24,10 +25,21 @@ public final class AppModel {
     /// ChatSession.setEffort and don't touch this.
     public var preferredEffort: String? {
         didSet {
-            UserDefaults.standard.set(preferredEffort, forKey: Self.preferredEffortKey)
+            defaults.set(preferredEffort, forKey: Self.preferredEffortKey)
         }
     }
     private static let preferredEffortKey = "preferredEffort"
+
+    /// Sidebar organization (feature 18). Persisted as JSON.
+    public var sidebarOptions = SidebarOptions() {
+        didSet {
+            guard sidebarOptions != oldValue else { return }
+            if let data = try? JSONEncoder().encode(sidebarOptions) {
+                defaults.set(data, forKey: Self.sidebarOptionsKey)
+            }
+        }
+    }
+    private static let sidebarOptionsKey = "sidebarOptions"
     public var searchQuery = "" {
         didSet { if searchQuery != oldValue { scheduleSearch() } }
     }
@@ -46,14 +58,20 @@ public final class AppModel {
     private var watchTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
 
-    public init(store: SessionStore = SessionStore(), databaseURL: URL? = nil) throws {
+    public init(store: SessionStore = SessionStore(), databaseURL: URL? = nil,
+                defaults: UserDefaults = .standard) throws {
         self.store = store
+        self.defaults = defaults
         let dbURL = databaseURL
             ?? FileManager.default.urls(for: .applicationSupportDirectory,
                                         in: .userDomainMask)[0]
                 .appendingPathComponent("Fabled/index.sqlite")
         self.index = try SearchIndex(databaseURL: dbURL, store: store)
-        self.preferredEffort = UserDefaults.standard.string(forKey: Self.preferredEffortKey)
+        self.preferredEffort = defaults.string(forKey: Self.preferredEffortKey)
+        if let data = defaults.data(forKey: Self.sidebarOptionsKey),
+           let options = try? JSONDecoder().decode(SidebarOptions.self, from: data) {
+            self.sidebarOptions = options
+        }
     }
 
     // No deinit: Swift 6.0 forbids a nonisolated deinit from touching the
@@ -91,8 +109,23 @@ public final class AppModel {
         await refreshHistory()
     }
 
+    /// Sidebar sections under the user's organization options.
+    public var sidebarSections: [SidebarSection] {
+        SidebarOrganizer.organize(allSummaries, options: sidebarOptions, now: Date())
+    }
+    private var allSummaries: [SessionSummary] = []
+
+    public func togglePin(_ sessionID: String) {
+        if sidebarOptions.pinnedSessionIDs.contains(sessionID) {
+            sidebarOptions.pinnedSessionIDs.remove(sessionID)
+        } else {
+            sidebarOptions.pinnedSessionIDs.insert(sessionID)
+        }
+    }
+
     public func refreshHistory() async {
         guard let summaries = try? await index.sessionSummaries() else { return }
+        allSummaries = summaries
         var groups: [String: ProjectHistory] = [:]
         var order: [String] = []   // projects ordered by their newest session
         for summary in summaries {

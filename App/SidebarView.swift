@@ -25,6 +25,32 @@ struct SidebarView: View {
                 .padding(6)
             }
         }
+        .toolbar {
+            ToolbarItem {
+                Menu {
+                    Picker("Group by", selection: $app.sidebarOptions.groupBy) {
+                        Text("Project").tag(SidebarOptions.GroupBy.project)
+                        Text("Date").tag(SidebarOptions.GroupBy.date)
+                        Text("None").tag(SidebarOptions.GroupBy.none)
+                    }
+                    Picker("Sort by", selection: $app.sidebarOptions.sortBy) {
+                        Text("Recency").tag(SidebarOptions.SortBy.recency)
+                        Text("Name").tag(SidebarOptions.SortBy.name)
+                    }
+                    Picker("Last activity", selection: Binding(
+                        get: { app.sidebarOptions.activityWindow.days ?? 0 },
+                        set: { app.sidebarOptions.activityWindow = $0 == 0 ? .all : .days($0) }
+                    )) {
+                        ForEach(SidebarOptions.ActivityWindow.presets, id: \.label) { preset in
+                            Text(preset.label).tag(preset.days ?? 0)
+                        }
+                    }
+                } label: {
+                    Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
+                }
+                .help("Group, sort, and filter sessions")
+            }
+        }
     }
 
     @ViewBuilder private var liveSection: some View {
@@ -57,19 +83,29 @@ struct SidebarView: View {
     }
 
     private var historySections: some View {
-        ForEach(app.history) { group in
-            Section(group.project.displayName) {
+        ForEach(app.sidebarSections) { section in
+            Section(section.title) {
                 // v1 keeps sections shallow; search covers the deep tail.
-                ForEach(group.sessions.prefix(10)) { summary in
+                ForEach(section.sessions.prefix(10)) { summary in
                     VStack(alignment: .leading) {
                         Text(summary.title).lineLimit(1)
                         Text(summary.lastActivity, format: .relative(presentation: .named))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .tag(AppModel.Selection.historical(summary.id))
+                    .contextMenu {
+                        Button(app.sidebarOptions.pinnedSessionIDs.contains(summary.id)
+                            ? "Unpin" : "Pin") { app.togglePin(summary.id) }
+                        Button("Continue Session") {
+                            Task { await app.resume(summary, fork: false) }
+                        }
+                        Button("Fork Session") {
+                            Task { await app.resume(summary, fork: true) }
+                        }
+                    }
                 }
-                if group.sessions.count > 10 {
-                    Text("\(group.sessions.count - 10) more — use search")
+                if section.sessions.count > 10 {
+                    Text("\(section.sessions.count - 10) more — use search")
                         .font(.caption).foregroundStyle(.tertiary)
                 }
             }
