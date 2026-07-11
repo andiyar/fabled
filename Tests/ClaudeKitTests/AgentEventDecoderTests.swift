@@ -62,6 +62,7 @@ final class AgentEventDecoderTests: XCTestCase {
         XCTAssertEqual(results[0].toolUseID, "toolu_01")
         XCTAssertEqual(results[0].content.stringValue, "hello-from-test")
         XCTAssertFalse(results[0].isError)
+        XCTAssertNil(results[0].toolUseResult)
     }
 
     func testDecodesResultEvent() throws {
