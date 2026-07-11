@@ -59,6 +59,44 @@ Status legend: ✅ CLOSED (Ben-verified) · 🔨 IN FLIGHT (scheduled in an expa
 | 20 | 07-11 | Commit `Screenshots for GUI etc/` — the CD-UI digest cites cd-01..cd-23 / fabled-01..03 from an **untracked** folder | Digest's source material should be in the repo (NOTE: a prior session marked it intentionally untracked — Ben decides) |
 | 21 | 07-10 | **Digest §6 "mac-assed" application scope** — native materials/sidebar vibrancy, toolbar treatment, SF Symbols discipline, proper dark mode, applied transitions (inspector slide, card appearance), empty states, keyboard-first affordances | 4b T5 shipped only the foundation (tokens + icon + serif scale); §6's "dedicated polish gate" shrank to one line (T15 gate item 10). The application pass has no scheduled home in 4b or 4c. Risk: T5 tokens are fixed hex — verify light/dark adaptivity at the 4b gate. Pairs with row 19's mockup-driven design phase |
 
+## 4b GATE RESULTS (2026-07-12, Ben ran the build, verbatim reactions)
+
+**Headline:** the plumbing works; the product still reads as a generic SwiftUI app and Ben feels shut out of the design. Effort speed and state-identity are the only unqualified wins. Several 4b features are illegible or unwanted as delivered — not "polish", but "wrong or invisible." **Two meta-failures dwarf the feature bugs: (a) I never brought Ben into the design, and (b) I keep describing the app to him in internal jargon.** Both are logged as feedback memories, not just rows.
+
+| Gate item | Ben's verdict (verbatim / close) | Row impact |
+|---|---|---|
+| 1. Effort/model on new-session picker | ❌ "The new session picker does NOT include the ability to choose effort or model." Only pick-project + message-to-begin. **Plus: NO WAY to return to the new-session picker without reopening Fabled.** (screenshot on Ben's machine) | NEW row 22 (picker controls) + NEW row 23 (no return-to-welcome). Pulls row 17 forward — it's a gate miss, not a nicety |
+| 2. Effort speed | ✅ "yes that seems to be a bit quicker" | Row 9 — effort lever CONFIRMED. (Thinking-stream half still unvetted — see item, Ben didn't call it out) |
+| 3. "Welcome inbox" | ❌ "I don't know what this actually refers to, what is the welcome inbox? this is gibberish." | Row 7 REGRESSES to OPEN — the attention-inbox concept is not legible in the build AND I described it in jargon |
+| 4. Sidebar status badge | ❌ "the only badge I can see is a tick? and it's under Live? is this meant to be useful" | NEW row 24 — feature 14 status legibility REJECTED as delivered (single idle session = lone green tick, communicates nothing) |
+| 5. Notifications | ⚪ "Haven't seen this." Untested (never triggered / never backgrounded into a gate) | Row unchanged; re-demo next gate |
+| 6. Continue/Fork resume | ❌ "I don't know why I even want this option at all. This is some[thing] we have discussed earlier." | Row 16 REINFORCED — Ben wants **type-to-resume**, not an explicit Continue/Fork/View choice. T12's framing is not what he asked for |
+| 7. Step grouping | ❌ "gibberish. I opened a 22 step task and all i see is continuous transcript. it doesn't collapse into summaries like the CD does." | NEW row 25 — **step grouping DOES NOT WORK in his real session.** Suspect: gated tools break every run (<3 consecutive finished non-anchor calls); the quality reviewer flagged exactly this. Feature is invisible in normal permission-prompted usage |
+| 8. Historical drill-down / Back | 🟡 back button confirmed ("there is finally a back button in the inspector"); **the smoke session I named was not findable** so Ben tried another. Annoyed at "walks the trail" jargon | Row 12 (Back button) CONFIRMED present. Findability of a specific session = note. Jargon = feedback memory |
+| 9. Liveness | ⚪ not mentioned / untested | Row unchanged |
+| 10. Design | ❌ "the icon is nice. the splash screen is a start. **it's still a generic, boring, swiftUI app. you haven't asked me for any feedback on design, GUI, or anything, and I'm sick of being ignored.**" | Rows 11/19/21 ESCALATED — see below. **Loudest signal of the gate.** |
+| 11. State identity (drafts) | ✅ "seems to work" | CONFIRMED |
+| 12. Task checklist | ⚪ "didn't test got bored of this." | Untested |
+
+### New rows from the 4b gate
+
+| # | Date | Comment | Notes |
+|---|------|---------|-------|
+| 22 | 07-12 | **New-session picker has no effort/model control** — only project + message | The pickers live in the ConversationView toolbar (post-launch), never on the welcome composer. Ben expects them at session-start. Direct instance of row 17. Small fix but a gate miss |
+| 23 | 07-12 | **No way back to the new-session / welcome screen** without quitting Fabled | Welcome shows only on `selection == nil`; nothing deselects. Need a "New session"/home affordance that returns to the welcome inbox (⌘N currently jumps to the folder picker, not the inbox) |
+| 24 | 07-12 | **Sidebar badge is useless as delivered** — a single idle session shows a lone green tick under "Live", conveying nothing | Feature 14 (T6/T7) rejected at the gate. Compact icon-only badge on one idle row has no information. Reconsider: is the badge earning its space? Words/context, or drop it |
+| 25 | 07-12 | **Step grouping never collapses in real sessions** — 22-step task rendered as continuous transcript, unlike CD | Root suspect: grouping needs ≥3 consecutive finished, error-free, non-anchor tool calls; gated sessions interleave permission rows that break every run (quality-review flagged this pre-merge). Either group across gates, lower/rethink the threshold, or group by turn. **Investigate against Ben's actual 22-step transcript next session** |
+
+### Escalations (design — the row that matters most)
+
+Rows **11, 19, 21** are no longer "verify at the gate" — Ben verified and it **failed**, with the specific charge that *he was never consulted*. The post-4b **design/interaction sprint** (already Ben-approved, DECISIONS "Post-4b roadmap") must now:
+- **Lead with Ben, not with tokens.** HTML mockups he reacts to, BEFORE any Theme code. He explicitly wants to be asked. Do not present a built thing and ask him to bless it — co-design it.
+- Treat "generic, boring SwiftUI" as the problem statement. T5 tokens are foundation only; the app has no native materials/vibrancy, no real motion, no distinctive layout — digest §6's whole application pass (row 21) is undone.
+- Reopen row 11 (font) — still sucks per the gate.
+- His design commentary already lives in this ledger + the CD-UI digest + DECISIONS; **read them and engage him** rather than re-deriving.
+
+**Status flips:** rows 7, 11, 19, 21 → ❌ OPEN (were IN FLIGHT / gate-pending). Rows 9 (effort), state-identity → effectively ✅ pending formal close. Rows 16, 17 → reinforced/pulled-forward. New rows 22–25 → ❌ OPEN.
+
 ---
 
-*Sources: full transcript sweep 2026-07-11 (`~/.claude/projects/-Users-andiyar-Developer-Fabled/*.jsonl`, sessions `975e1785`, `9f8443da`, `409fdeca`, `03f7002f`, `5a018155`, `2b161833`). Companion docs: FOLLOWUPS.md (tech riders), DECISIONS.md (scope calls), plans/2026-07-10-cd-ui-digest.md (screenshot distillation).*
+*Sources: full transcript sweep 2026-07-11 (`~/.claude/projects/-Users-andiyar-Developer-Fabled/*.jsonl`, sessions `975e1785`, `9f8443da`, `409fdeca`, `03f7002f`, `5a018155`, `2b161833`) + 4b gate 2026-07-12. Companion docs: FOLLOWUPS.md (tech riders), DECISIONS.md (scope calls), plans/2026-07-10-cd-ui-digest.md (screenshot distillation).*
