@@ -111,9 +111,18 @@ public enum TimelineReducer {
                     id: stream.uuid ?? "stream-\(items.count)",
                     markdown: text, isStreaming: true))
             }
-        case .messageStart, .contentBlockStart, .thinkingDelta, .inputJSONDelta,
+        case .thinkingDelta(_, let thinking):
+            if case .thinking(let id, let text, true) = items.last {
+                items[items.count - 1] = .thinking(
+                    id: id, text: text + thinking, isStreaming: true)
+            } else {
+                items.append(.thinking(
+                    id: stream.uuid ?? "thinking-\(items.count)",
+                    text: thinking, isStreaming: true))
+            }
+        case .messageStart, .contentBlockStart, .inputJSONDelta,
              .contentBlockStop, .messageDelta, .messageStop, .other:
-            break  // thinking state lives on ChatSession; partial tool input is Plan 4.
+            break  // partial tool input is Plan 4.
         }
     }
 
@@ -130,7 +139,10 @@ public enum TimelineReducer {
                 textIndex += 1
             case .toolUse(let id, let name, let input):
                 upsertToolCall(&items, id: id, name: name, input: input)
-            case .thinking, .unknown:
+            case .thinking(let text):
+                guard !text.isEmpty else { break }
+                finalizeThinking(&items, text: text, fallbackID: "\(baseID)-think-\(textIndex)")
+            case .unknown:
                 break
             }
         }
@@ -146,12 +158,32 @@ public enum TimelineReducer {
         }
     }
 
+    /// The final assistant message's thinking block replaces the streamed
+    /// provisional item in place (same id — SwiftUI update, not remove+insert);
+    /// on replay, where nothing streamed, it appends finalized.
+    private static func finalizeThinking(_ items: inout [TimelineItem], text: String, fallbackID: String) {
+        if case .thinking(let id, _, true) = items.last {
+            items[items.count - 1] = .thinking(id: id, text: text, isStreaming: false)
+        } else {
+            items.append(.thinking(id: fallbackID, text: text, isStreaming: false))
+        }
+    }
+
     /// A turn that ends without a finalizing assistant message (interrupt,
-    /// error mid-stream) must not leave a streaming item for the next
-    /// turn's deltas to coalesce onto.
+    /// error mid-stream) must not leave streaming items for later deltas to
+    /// coalesce onto. Sweeps the whole array — a thinking item can be stranded
+    /// non-last when text deltas started after it (thinking → text →
+    /// interrupt-before-assistant-event).
     private static func finalizeDanglingStreamText(_ items: inout [TimelineItem]) {
-        if case .assistantText(let id, let markdown, true) = items.last {
-            items[items.count - 1] = .assistantText(id: id, markdown: markdown, isStreaming: false)
+        for index in items.indices {
+            switch items[index] {
+            case .assistantText(let id, let markdown, true):
+                items[index] = .assistantText(id: id, markdown: markdown, isStreaming: false)
+            case .thinking(let id, let text, true):
+                items[index] = .thinking(id: id, text: text, isStreaming: false)
+            default:
+                break
+            }
         }
     }
 

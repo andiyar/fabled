@@ -51,6 +51,15 @@ struct ConversationView: View {
         return current
     }
 
+    /// Ticker text under the stream: token count when the CLI reports it
+    /// (system/thinking_tokens, probe finding 7).
+    private var thinkingLabel: String {
+        if let tokens = session.thinkingTokens, tokens > 0 {
+            return "Thinking… ~\(tokens) tokens"
+        }
+        return "Thinking…"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let note = session.versionNote {
@@ -90,9 +99,10 @@ struct ConversationView: View {
                         if session.isThinking {
                             HStack(spacing: 6) {
                                 ProgressView().controlSize(.small)
-                                Text("Thinking…")
+                                Text(thinkingLabel)
                                     .font(Theme.assistantFont(.callout)).italic()
                                     .foregroundStyle(.secondary)
+                                    .contentTransition(.numericText())
                             }
                         }
                     }

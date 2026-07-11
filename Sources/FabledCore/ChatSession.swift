@@ -19,6 +19,9 @@ public final class ChatSession: Identifiable {
     public var pendingGate: InteractionGate? { pendingGates.first }
     public private(set) var isWorking = false
     public private(set) var isThinking = false
+    /// Cumulative estimated thinking tokens for the current turn, from
+    /// system/thinking_tokens events (probe finding 7). nil outside turns.
+    public private(set) var thinkingTokens: Int?
     public private(set) var info: SystemInit?
     public private(set) var commands: [SlashCommand] = []
     public private(set) var models: [ModelOption] = []
@@ -297,6 +300,7 @@ public final class ChatSession: Identifiable {
             turnsInFlight = max(0, turnsInFlight - 1)
             isWorking = turnsInFlight > 0
             isThinking = false
+            thinkingTokens = nil
             // An aborted turn (interrupt → error_during_execution) abandons any
             // open permission gate — the CLI is no longer waiting for a decision.
             // On normal completion the list is already empty, so this is a no-op.
@@ -342,6 +346,10 @@ public final class ChatSession: Identifiable {
             if subtype == "status",
                let mode = raw["permissionMode"]?.stringValue, !mode.isEmpty {
                 permissionMode = mode
+            }
+            if subtype == "thinking_tokens",
+               let estimated = raw["estimated_tokens"]?.doubleValue {
+                thinkingTokens = Int(estimated)
             }
         case .assistant(let message):
             for block in message.content {

@@ -439,4 +439,16 @@ final class ChatSessionTests: XCTestCase {
             effort: "medium")
         XCTAssertEqual(session.currentEffort, "medium")
     }
+
+    func testThinkingTokensTickerAccumulatesAndResets() async throws {
+        let (session, continuation, _) = makeSession()
+        try yield(continuation, #"""
+        {"type":"system","subtype":"thinking_tokens","estimated_tokens":44,"estimated_tokens_delta":17,"uuid":"tt1","session_id":"s"}
+        """#)
+        await waitUntil("ticker") { session.thinkingTokens == 44 }
+        try yield(continuation, #"""
+        {"type":"result","subtype":"success","is_error":false,"num_turns":1,"duration_ms":5,"session_id":"s"}
+        """#)
+        await waitUntil("reset") { session.thinkingTokens == nil }
+    }
 }

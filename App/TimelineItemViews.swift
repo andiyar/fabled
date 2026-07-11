@@ -21,6 +21,8 @@ struct TimelineItemView: View {
             ToolCallCard(id: id, name: name, summary: summary, input: input,
                          result: result, isError: isError, isRunning: isRunning,
                          subagentSteps: session?.subagentTimelines[id]?.count)
+        case .thinking(let id, let text, let isStreaming):
+            ThinkingItemView(id: id, text: text, isStreaming: isStreaming)
         case .permission(_, let request, let resolution):
             // Static status row — the interactive card renders in ComposerView while pending.
             PermissionStatusView(request: request, resolution: resolution)

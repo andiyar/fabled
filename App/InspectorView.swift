@@ -104,6 +104,13 @@ struct InspectorPanel: View {
         case .raw(_, let type, let raw):
             sectionHeader(type, systemImage: "questionmark.square.dashed")
             monospacedBlock(JSONPretty.string(raw))
+        case .thinking(_, let text, _):
+            sectionHeader("Thinking", systemImage: "sparkle")
+            Text(text)
+                .font(Theme.assistantFont(.callout)).italic()
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         default:
             // Other item kinds are fully visible inline; nothing deeper to show.
             Text("No additional detail for this item.")
