@@ -180,5 +180,20 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(resolved.didFallBack)
         XCTAssertEqual(resolved.url,
                        FileManager.default.homeDirectoryForCurrentUser)
+
+        // Absolute but deleted: passes hasPrefix("/") and must be caught by
+        // the fileExists check (the T12 widening) — falls back too.
+        let deletedPath = "/nonexistent-\(UUID().uuidString)"
+        let deleted = SessionSummary(
+            id: "y",
+            project: ProjectFolder(flattenedName: "-deleted-project",
+                                   originalPath: deletedPath,
+                                   directoryURL: URL(fileURLWithPath: deletedPath)),
+            fileURL: URL(fileURLWithPath: "\(deletedPath)/y.jsonl"),
+            title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        let resolvedDeleted = model.resolveWorkingDirectory(for: deleted)
+        XCTAssertTrue(resolvedDeleted.didFallBack)
+        XCTAssertEqual(resolvedDeleted.url,
+                       FileManager.default.homeDirectoryForCurrentUser)
     }
 }

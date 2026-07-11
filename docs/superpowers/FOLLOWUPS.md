@@ -102,3 +102,7 @@ Deferred:
 - **First-turn latency is model thinking, not harness (2026-07-10 measurements).** App-identical spawn: hooks+handshake+API dispatch <1s; opus full turn 5s. Fable-5 on the same repo question: default effort → first visible text +24s; `--effort medium` → +17s (~30% faster, identical tool-use shape). Claude Desktop passes `--effort` on every spawn AND renders the thinking stream (perceived activation ~3s); Fabled does neither. Two 4b levers: (a) session effort control passing `--effort` (flag confirmed on public CLI 2.1.206); (b) render thinking deltas (dimmed/collapsible) + thinking_tokens ticker instead of the bare spinner. → 4b (pairs with feature 11 liveness).
 - **TodoWrite is gone from this CLI config (2026-07-09 finding, ledgered 2026-07-10).** Replaced by TaskCreate/TaskUpdate/TaskList. T10's pinned checklist card is correct-but-dormant: models, reducer, card, and tests all target TodoWrite inputs that never arrive. → 4b: feed the checklist from the task tools (shape probe needed), reuse the card as-is.
 - **Live-vs-replay diff-count divergence (Minor, one observation).** One Edit row showed +6−6 live but +5−5 on historical replay of the same session — likely a trailing-newline or coalescing asymmetry between wire input and transcript JSON. One repro + pin test when touched. → backlog.
+
+## From Plan 4b reviews (2026-07-11)
+
+- **resume() TOCTOU guard untested** — the in-flight `resumingSessionIDs` set closes the double-Continue race (T12 review), but testing it needs a launcher-injection seam on AppModel. → 4c if felt.

@@ -208,6 +208,12 @@ public final class AppModel {
         }
     }
 
+    /// Continues in flight: the collision guard checks liveSessions, but the
+    /// session lands there only after two awaits — without this set, a rapid
+    /// double-Continue passes the guard twice and spawns two processes on one
+    /// session id (T12 quality review).
+    private var resumingSessionIDs: Set<String> = []
+
     /// Resume/fork replays nothing on the wire (probe finding 8) — the
     /// timeline is seeded from the on-disk transcript. Continue reattaches
     /// the SAME session id, so a second live process on that id is forbidden
@@ -218,6 +224,13 @@ public final class AppModel {
             selection = .live(existing.id)
             return
         }
+        // Forks deliberately unguarded — each fork is a new identity, so a
+        // double-click forking twice is benign.
+        if !fork {
+            guard !resumingSessionIDs.contains(summary.id) else { return }
+            resumingSessionIDs.insert(summary.id)
+        }
+        defer { if !fork { resumingSessionIDs.remove(summary.id) } }
         var seed = await historicalTimeline(for: summary)
         let resolved = resolveWorkingDirectory(for: summary)
         if fork {
