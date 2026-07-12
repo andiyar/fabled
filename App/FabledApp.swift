@@ -61,7 +61,14 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let center = UNUserNotificationCenter.current()
         if !authorizationRequested {
             authorizationRequested = true
-            center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+            // Use the async request, NOT the completion-handler form: `post` is
+            // @MainActor, so an inline completion closure inherits main-actor
+            // isolation, but UNUserNotificationCenter invokes it on its own
+            // background call-out queue — the Swift 6 runtime then traps on the
+            // executor mismatch (EXC_BREAKPOINT via _dispatch_assert_queue_fail,
+            // crash 2026-07-13). Awaiting has no main-actor closure to mis-invoke.
+            Task { _ = try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge]) }
         }
         let content = UNMutableNotificationContent()
         content.title = note.title
