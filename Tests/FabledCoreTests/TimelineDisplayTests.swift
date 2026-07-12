@@ -136,10 +136,11 @@ struct TimelineDisplayGroupingTests {
                      tool("b","Read"), thinking("t3"), tool("c","Read")]
         let rows = TimelineDisplay.grouped(items)
         #expect(rows.count == 1)                        // one group; interior + leading thinking absorbed
-        guard case .toolGroup(_, let grouped, let summary) = rows[0] else {
+        guard case .toolGroup(let id, let grouped, let summary) = rows[0] else {
             Issue.record("expected a group"); return
         }
-        #expect(summary == "Read 3 files" || summary == "3 × Read")
+        #expect(id == "a")   // anchors on the first real tool, not the leading thinking "t1"
+        #expect(summary == "3 × Read")
         #expect(grouped.filter { $0.toolCallID != nil }.count == 3)
     }
 
@@ -170,5 +171,12 @@ struct TimelineDisplayGroupingTests {
         let denyRows = TimelineDisplay.grouped(deny)
         #expect(!denyRows.contains { if case .toolGroup = $0 { return true } else { return false } })
         #expect(denyRows.contains { if case .item(let i) = $0, case .permission = i { return true } else { return false } })
+        // a pending (unresolved) permission is also a hard break → the prompt
+        // must never hide inside a collapsed group.
+        let pending = try [tool("a","Bash"), tool("b","Bash"),
+                           permission("p", nil), tool("c","Bash")]
+        let pendingRows = TimelineDisplay.grouped(pending)
+        #expect(!pendingRows.contains { if case .toolGroup = $0 { return true } else { return false } })
+        #expect(pendingRows.contains { if case .item(let i) = $0, case .permission = i { return true } else { return false } })
     }
 }
