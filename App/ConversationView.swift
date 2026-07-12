@@ -144,10 +144,20 @@ struct ConversationView: View {
             InspectorPanel(item: inspectedItem,
                            subagentItems: inspectedID.flatMap { session.subagentTimelines[$0] },
                            inspectItem: inspectAction,
+                           timeline: session.timeline,
+                           subagents: session.subagentTimelines,
                            inspectedID: $inspectedID,
-                           onBack: inspectBackStack.isEmpty ? nil : {
-                               inspectedID = inspectBackStack.popLast()
-                           })
+                           // Back pops the trail one level, or returns to the
+                           // Activity list (inspectedID = nil) when it's empty.
+                           onBack: {
+                               if let previous = inspectBackStack.popLast() {
+                                   inspectedID = previous
+                               } else {
+                                   inspectedID = nil
+                               }
+                           },
+                           // "Clear" on the list header hides the inspector.
+                           onClear: { isInspectorPresented = false })
                 .inspectorColumnWidth(min: 300, ideal: 420, max: 640)
         }
         // Clearing the selection (the panel's ✕) ends the trail; ⌥⌘I only

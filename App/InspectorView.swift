@@ -28,10 +28,16 @@ extension EnvironmentValues {
 /// Right-hand detail panel: full tool I/O, diffs (Task 7), subagent
 /// drill-down (Task 11), raw events. The transcript shows one-liners;
 /// everything deep lives here (Electron-parity gate feedback). The
-/// container resolves the inspected item and passes only that item plus
-/// its subagent slice — handing the panel whole timelines makes SwiftUI
-/// deep-compare every accumulated payload per stream event (T6 quality
-/// review).
+/// container resolves the inspected item and passes that item plus its
+/// subagent slice for the detail view. It ALSO passes the full timeline +
+/// subagent map so the default face can be the Activity list (row 26) —
+/// which softens the T6 rule that kept whole timelines out of the panel
+/// (deep-comparing accumulated payloads per stream event). The tradeoff is
+/// deliberate: a "list of everything" needs everything. It is bounded —
+/// the rows are only *computed* in the `item == nil` branch, ActivityRow
+/// values are tiny, and realistic sessions are dozens of steps. If a huge
+/// session ever stutters, move the row-building into the container and pass
+/// `[ActivityRow]` (small, cheap to diff) instead of the raw timeline.
 struct InspectorPanel: View {
     let item: TimelineItem?
     /// Sub-timeline of the inspected Task/Agent call, if any (Task 11).
@@ -44,11 +50,20 @@ struct InspectorPanel: View {
     /// back nil. We re-inject it here so the drill-down sub-rows can switch the
     /// panel to a sub item (T12 gate). Do not rely on inheritance for this.
     let inspectItem: InspectItemAction?
+    /// The full timeline + subagent map — the source for the default Activity
+    /// list shown when nothing is selected (UX-LEDGER row 26). Handed straight
+    /// to ActivityListView, which builds the rows only in the `item == nil`
+    /// branch (see the struct-level note on the T6 tradeoff).
+    let timeline: [TimelineItem]
+    let subagents: [String: [TimelineItem]]
     @Binding var inspectedID: String?
-    /// Pops the drill-down trail (Task detail → sub-row → back). nil hides
-    /// the button — both containers pass it since T14 gave historical
-    /// sessions on-disk subagent drill-down; nil now just means "trail empty".
+    /// Back affordance in a detail view: pops the drill trail one level, or
+    /// returns to the Activity list when the trail is empty (both containers
+    /// pass a non-nil closure — see their call sites). Optional only so the
+    /// list branch, which has no Back, can omit it.
     var onBack: (() -> Void)? = nil
+    /// The Activity list header's "Clear" — hides the inspector. nil hides it.
+    var onClear: (() -> Void)? = nil
 
     var body: some View {
         if let item {
@@ -63,7 +78,7 @@ struct InspectorPanel: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
-                            .help("Back to the previous item")
+                            .help("Back to the previous item, or the activity list")
                         }
                         Spacer()
                         // In-panel close (deliberately not a toolbar item —
@@ -76,7 +91,7 @@ struct InspectorPanel: View {
                                 .foregroundStyle(.tertiary)
                         }
                         .buttonStyle(.plain)
-                        .help("Clear selection")
+                        .help("Back to the activity list")
                     }
                     content(for: item)
                 }
@@ -88,10 +103,11 @@ struct InspectorPanel: View {
             // the drill-down TimelineItemViews reliably see the action.
             .environment(\.inspectItem, inspectItem)
         } else {
-            ContentUnavailableView(
-                "Nothing selected",
-                systemImage: "sidebar.right",
-                description: Text("Click a tool card to see its full detail."))
+            // Default face: the clickable Activity list (row 26). inspectItem
+            // is handed to the rows EXPLICITLY (they never read the env), so no
+            // `.environment` is needed on this branch.
+            ActivityListView(timeline: timeline, subagents: subagents,
+                             inspectItem: inspectItem, onClear: onClear)
         }
     }
 
