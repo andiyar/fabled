@@ -29,9 +29,9 @@ struct SessionStatusBadge: View {
 
     private var word: String {
         switch state {
-        case .needsApproval: "Needs input"
+        case .needsApproval: "Needs your reply"
         case .working: "Working"
-        case .idle: "Ready"
+        case .idle: "Ready to review"
         case .ended: "Ended"
         }
     }
@@ -45,10 +45,10 @@ struct SessionStatusBadge: View {
     }
     private var color: Color {
         switch state {
-        case .needsApproval: Theme.statusNeedsInput
-        case .working: Theme.statusWorking
-        case .idle: Theme.statusReady
-        case .ended: Theme.statusEnded
+        case .needsApproval: Theme.needsYou
+        case .working: Theme.live
+        case .idle: Theme.review
+        case .ended: Theme.faint
         }
     }
 }
