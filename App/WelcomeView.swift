@@ -7,14 +7,26 @@ import FabledCore
 /// locked palette. Shown on launch, on ⌘N, and whenever nothing is selected.
 struct WelcomeView: View {
     @Environment(AppModel.self) private var app
-    let newSession: () -> Void
 
     @State private var draft = ""
-    @State private var chosenProject: ProjectFolder?
+    /// The chosen primary folder — nil until the user actively picks one, in
+    /// which case `resolvedPrimaryURL` falls back to the most recent project
+    /// (preserving the pre-rework default). Gate rework: Ben needs to combine
+    /// folders from different locations ("~/Downloads AND a project
+    /// folder"), so this primary/additional split replaces the old
+    /// same-root multi-select panel.
+    @State private var primaryURL: URL?
+    @State private var additionalDirs: [URL] = []
+    @State private var isChoosingPrimary = false
+    @State private var isAddingFolder = false
     @FocusState private var composerFocused: Bool
 
-    private var targetProject: ProjectFolder? {
-        chosenProject ?? app.recentProjects(limit: 1).first
+    /// `primaryURL`, defaulting to the most recent project when unset.
+    private var resolvedPrimaryURL: URL? {
+        if let primaryURL { return primaryURL }
+        guard let recent = app.recentProjects(limit: 1).first,
+              recent.originalPath.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: recent.originalPath)
     }
 
     // "Waiting on you" = needs-your-reply first, then ready-to-review.
@@ -140,6 +152,9 @@ struct WelcomeView: View {
                 Spacer(minLength: Theme.spaceS)
                 sendButton
             }
+            if !additionalDirs.isEmpty {
+                additionalFoldersRow
+            }
         }
         .padding(Theme.spaceM)
         .background(Theme.panel, in: RoundedRectangle(cornerRadius: 11))
@@ -156,9 +171,10 @@ struct WelcomeView: View {
         Menu {
             ForEach(app.recentProjects(limit: 12)) { project in
                 Button {
-                    chosenProject = project
+                    guard project.originalPath.hasPrefix("/") else { return }
+                    choosePrimary(URL(fileURLWithPath: project.originalPath))
                 } label: {
-                    if project.id == targetProject?.id {
+                    if isPrimary(project) {
                         Label(project.displayName, systemImage: "checkmark")
                     } else {
                         Text(project.displayName)
@@ -167,14 +183,65 @@ struct WelcomeView: View {
                 .help(project.originalPath)
             }
             Divider()
-            Button("Open folder…", action: newSession)
+            // Single-select, any location (gate rework — the old panel could
+            // only multi-select siblings sitting in one directory).
+            Button("Choose folder…") { isChoosingPrimary = true }
+            if resolvedPrimaryURL != nil {
+                Button("Add folder…") { isAddingFolder = true }
+            }
         } label: {
-            ChipLabel(icon: "folder",
-                      label: targetProject?.displayName ?? "Choose project")
+            ChipLabel(icon: "folder", label: projectChipLabel)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+        .fileImporter(isPresented: $isChoosingPrimary,
+                      allowedContentTypes: [.folder],
+                      allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                choosePrimary(url)
+            }
+        }
+        .fileImporter(isPresented: $isAddingFolder,
+                      allowedContentTypes: [.folder],
+                      allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let url = urls.first,
+               url != resolvedPrimaryURL, !additionalDirs.contains(url) {
+                additionalDirs.append(url)
+            }
+        }
+    }
+
+    private var projectChipLabel: String {
+        let base = resolvedPrimaryURL?.lastPathComponent ?? "Choose project"
+        return additionalDirs.isEmpty ? base : "\(base) +\(additionalDirs.count)"
+    }
+
+    /// Small removable pills under the chip row — what's included stays
+    /// visible without opening the menu (only shown once something's added).
+    private var additionalFoldersRow: some View {
+        HStack(spacing: Theme.spaceXS) {
+            ForEach(additionalDirs, id: \.self) { url in
+                AdditionalFolderPill(url: url) {
+                    additionalDirs.removeAll { $0 == url }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func isPrimary(_ project: ProjectFolder) -> Bool {
+        project.originalPath.hasPrefix("/")
+            && URL(fileURLWithPath: project.originalPath) == resolvedPrimaryURL
+    }
+
+    /// Switching the primary folder starts a fresh additional-folder set —
+    /// otherwise a stale folder from an unrelated earlier pick would silently
+    /// ride along into the new session.
+    private func choosePrimary(_ url: URL) {
+        guard url != resolvedPrimaryURL else { return }
+        primaryURL = url
+        additionalDirs = []
     }
 
     private var sendButton: some View {
@@ -191,17 +258,52 @@ struct WelcomeView: View {
     }
 
     private var canStart: Bool {
-        targetProject != nil
+        resolvedPrimaryURL != nil
             && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func startSession() {
-        guard canStart, let project = targetProject,
-              project.originalPath.hasPrefix("/") else { return }
-        let directory = URL(fileURLWithPath: project.originalPath)
+        guard canStart, let primary = resolvedPrimaryURL else { return }
+        let dirs = additionalDirs
         let message = draft
         draft = ""
-        Task { await app.newSession(at: directory, firstMessage: message) }
+        Task {
+            await app.newSession(at: primary, firstMessage: message,
+                                 additionalDirectories: dirs)
+        }
+    }
+}
+
+/// One "additional folder" pill under the composer's chip row — the folder
+/// name plus a small remove control, on the same recessed-panel token as
+/// the chips above it.
+private struct AdditionalFolderPill: View {
+    let url: URL
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.spaceXS) {
+            Image(systemName: "folder")
+                .font(.system(size: 9))
+                .foregroundStyle(Theme.accentBronze)
+            Text(url.lastPathComponent)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted)
+                .lineLimit(1)
+            Button(action: remove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Theme.faint)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, Theme.spaceS)
+        .padding(.vertical, 3)
+        .background(Theme.panelRecessed, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(Theme.hairline, lineWidth: 1)
+        }
+        .help(url.path)
     }
 }
 

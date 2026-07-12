@@ -14,8 +14,7 @@ struct RootView: View {
     }
 
     var body: some View {
-        @Bindable var app = app
-        return NavigationSplitView {
+        NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280)
         } detail: {
@@ -27,14 +26,6 @@ struct RootView: View {
             NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
         }
         .task { await app.bootstrap() }
-        .fileImporter(isPresented: $app.isPickingFolder,
-                      allowedContentTypes: [.folder],
-                      allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result, let primary = urls.first {
-                Task { await app.newSession(at: primary,
-                                            additionalDirectories: Array(urls.dropFirst())) }
-            }
-        }
         .alert("Session failed", isPresented: Binding(
             get: { app.launchError != nil },
             set: { if !$0 { app.clearLaunchError() } }
@@ -56,7 +47,7 @@ struct RootView: View {
                     // state that SHOULD survive switches lives up here.
                     .id(session.id)
             } else {
-                WelcomeView { app.isPickingFolder = true }
+                WelcomeView()
             }
         case .historical(let id):
             if let summary = app.summary(forSessionID: id) {
@@ -65,7 +56,7 @@ struct RootView: View {
                 Text("Not found")
             }
         case nil:
-            WelcomeView { app.isPickingFolder = true }
+            WelcomeView()
         }
     }
 }
