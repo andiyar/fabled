@@ -127,7 +127,8 @@ struct ConversationView: View {
                     .padding(.bottom, 4)
                     .frame(maxWidth: Theme.contentMaxWidth)
             }
-            Divider()
+            // The composer bar draws its own top hairline (matching the locked
+            // mockup's single separator) — no extra Divider here.
             ComposerView(session: session)
         }
         .navigationTitle(session.title)
