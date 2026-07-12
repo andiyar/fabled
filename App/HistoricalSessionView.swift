@@ -12,6 +12,14 @@ struct HistoricalSessionView: View {
     /// Type-to-resume draft (UX-LEDGER row 16): typing here and sending
     /// reattaches this session instead of making Ben hunt for Continue.
     @State private var draft = ""
+    /// This chat's REAL model/effort/permission, shown in the resume
+    /// composer so it never lies with generic "Default" chips (gate rework).
+    /// Model + permission are recovered from the transcript
+    /// (`AppModel.resumeState`); effort isn't recorded on disk, so it shows
+    /// — and stays settable at — the user's spawn default.
+    @State private var resumeModel: String?
+    @State private var resumeEffort: String?
+    @State private var resumePermission: String?
     /// On-disk subagent sub-timelines keyed by parent Task tool_use id — the
     /// historical analog of ChatSession.subagentTimelines (4b Task 14).
     @State private var subagentTimelines: [String: [TimelineItem]] = [:]
@@ -145,11 +153,26 @@ struct HistoricalSessionView: View {
             // ConversationView's reset so a stale selection can't silently
             // resolve to another summary's row.
             inspectedID = nil
+            // A stale chat's chips must never show through while THIS one's
+            // real values are still loading — the exact bug this feature
+            // fixes, just transient instead of permanent.
+            resumeModel = nil
+            resumePermission = nil
+            resumeEffort = nil
             let loaded = await app.historicalTimeline(for: summary)
             // Rapid switching: a slow load must not land on a newer selection
             // (FOLLOWUPS stale-assignment window).
             guard !Task.isCancelled, requested == summary.id else { return }
             items = loaded
+            // Resume composer chips (gate rework, UX-LEDGER "Default / Default
+            // / Default" feedback): the model + permission mode this chat
+            // actually last used, recovered from its transcript. Effort isn't
+            // recorded on disk, so it shows the user's current spawn default.
+            let rs = await app.resumeState(for: summary)
+            guard !Task.isCancelled, requested == summary.id else { return }
+            resumeModel = rs.model
+            resumePermission = rs.permissionMode
+            resumeEffort = app.preferredEffort
             // Drill-down data loads AFTER the main items, same race guard: the
             // on-disk read is heavier, and rows work without it (chips just
             // stay absent until it lands).
@@ -174,7 +197,7 @@ struct HistoricalSessionView: View {
                 .lineLimit(1...8)
                 .onSubmit(sendAndResume)
             HStack(spacing: Theme.spaceS) {
-                ComposerChips()
+                ComposerChips(model: $resumeModel, effort: $resumeEffort, permission: $resumePermission)
                 Spacer(minLength: Theme.spaceS)
                 resumeSendButton
             }
@@ -205,6 +228,11 @@ struct HistoricalSessionView: View {
         guard canSendResume else { return }
         // Clear only on delivery — a failed spawn keeps Ben's typed prose
         // (he resumes with novel/thesis paragraphs) instead of wiping it.
-        Task { if await app.resumeAndSend(summary, text: draft) { draft = "" } }
+        Task {
+            if await app.resumeAndSend(summary, text: draft, model: resumeModel,
+                                       effort: resumeEffort, permissionMode: resumePermission) {
+                draft = ""
+            }
+        }
     }
 }

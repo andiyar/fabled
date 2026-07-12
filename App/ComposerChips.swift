@@ -1,16 +1,22 @@
 import SwiftUI
 import FabledCore
 
-/// The start-composer's sticky spawn-default chips (UX-LEDGER row 22): model,
-/// effort, and permission-mode. Each writes the persisted `app.preferred*`
-/// field that `AppModel.newSession` reads when it spawns `claude`, so picking
-/// a value here drives the next new session's launch — no session exists yet.
+/// A reusable model / effort / permission-mode chip row, bound to three
+/// values the caller owns — it never writes app state directly.
 ///
-/// A live-session variant (chips that drive a running `ChatSession` via
-/// setModel/setEffort/setPermissionMode) will be added when the conversation
-/// composer adopts chips (B2.2); it lives with the real pickers today.
+/// The start composer (WelcomeView) binds these to `app.preferred*`, the
+/// sticky spawn defaults (UX-LEDGER row 22): picking a value there drives
+/// the next new session's launch.
+///
+/// The resume composer (HistoricalSessionView) binds these to a past chat's
+/// own state instead — the model + permission mode recovered from its
+/// transcript, plus the live effort default — so opening an old chat shows
+/// what it will ACTUALLY resume on, not misleading "Default" chips (gate
+/// rework, the "I don't even know what the last model was" feedback).
 struct ComposerChips: View {
-    @Environment(AppModel.self) private var app
+    @Binding var model: String?
+    @Binding var effort: String?
+    @Binding var permission: String?
 
     /// No live catalog exists pre-spawn, so offer the hardcoded known-models
     /// list (what `merged(catalog: [])` would return anyway).
@@ -28,13 +34,13 @@ struct ComposerChips: View {
 
     private var modelChip: some View {
         chip(icon: "cpu", label: modelLabel, textColor: Theme.accentBronze) {
-            optionButton("Default", isSelected: app.preferredModel == nil) {
-                app.preferredModel = nil
+            optionButton("Default", isSelected: model == nil) {
+                model = nil
             }
             ForEach(newSessionModels) { option in
                 optionButton(option.displayName,
-                             isSelected: app.preferredModel == option.value) {
-                    app.preferredModel = option.value
+                             isSelected: model == option.value) {
+                    model = option.value
                 }
             }
         }
@@ -42,22 +48,23 @@ struct ComposerChips: View {
     }
 
     private var modelLabel: String {
-        guard let preferred = app.preferredModel else { return "Default" }
-        // A persisted-but-unknown id (e.g. a custom model set elsewhere) shows
-        // as its raw id, not "Default".
-        return newSessionModels.first { $0.value == preferred }?.displayName ?? preferred
+        guard let model else { return "Default" }
+        // A persisted-but-unknown id (e.g. a custom model set elsewhere, or a
+        // transcript's model that has since been retired) shows as its raw
+        // id, not "Default".
+        return newSessionModels.first { $0.value == model }?.displayName ?? model
     }
 
     // MARK: - Effort
 
     private var effortChip: some View {
         chip(icon: "gauge.with.needle", label: effortLabel, textColor: Theme.ink) {
-            optionButton("CLI default", isSelected: app.preferredEffort == nil) {
-                app.preferredEffort = nil
+            optionButton("CLI default", isSelected: effort == nil) {
+                effort = nil
             }
             ForEach(EffortPickerMenu.fallbackLevels, id: \.self) { level in
-                optionButton(level.capitalized, isSelected: app.preferredEffort == level) {
-                    app.preferredEffort = level
+                optionButton(level.capitalized, isSelected: effort == level) {
+                    effort = level
                 }
             }
         }
@@ -65,20 +72,20 @@ struct ComposerChips: View {
     }
 
     private var effortLabel: String {
-        app.preferredEffort?.capitalized ?? "Default"
+        effort?.capitalized ?? "Default"
     }
 
     // MARK: - Permission mode
 
     private var permissionChip: some View {
         chip(icon: "lock.shield", label: permissionLabel, textColor: Theme.ink) {
-            optionButton("CLI default", isSelected: app.preferredPermissionMode == nil) {
-                app.preferredPermissionMode = nil
+            optionButton("CLI default", isSelected: permission == nil) {
+                permission = nil
             }
             ForEach(PermissionPickerMenu.modes, id: \.mode) { entry in
                 optionButton(entry.title,
-                             isSelected: app.preferredPermissionMode == entry.mode) {
-                    app.preferredPermissionMode = entry.mode
+                             isSelected: permission == entry.mode) {
+                    permission = entry.mode
                 }
             }
         }
@@ -87,7 +94,7 @@ struct ComposerChips: View {
 
     private var permissionLabel: String {
         PermissionPickerMenu.modes
-            .first { $0.mode == app.preferredPermissionMode }?.title ?? "Default"
+            .first { $0.mode == permission }?.title ?? "Default"
     }
 
     // MARK: - Shared

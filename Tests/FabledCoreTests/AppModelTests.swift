@@ -313,6 +313,23 @@ final class AppModelTests: XCTestCase {
                        "no recorded mode → the user's preferred spawn default")
     }
 
+    /// Gate rework: the resume composer's chips let Ben override what a chat
+    /// resumes on — an explicit override must win over both the transcript
+    /// AND the spawn defaults (the two things `resume` falls back to today).
+    func testResumeUsesExplicitOverrides() async throws {
+        let (model, _) = try makeModel(defaults: freshDefaults())
+        let box = LaunchBox(); captureLaunch(model, into: box)
+        let summary = SessionSummary(id: "sess-1",
+            project: ProjectFolder(flattenedName: "-tmp-demo", originalPath: "/tmp/demo",
+                                   directoryURL: URL(fileURLWithPath: "/tmp/demo")),
+            fileURL: URL(fileURLWithPath: "/tmp/demo/sess-1.jsonl"),
+            title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        await model.resume(summary, fork: false, model: "claude-opus-4-8", effort: "high", permissionMode: "auto")
+        XCTAssertEqual(box.configuration?.model, "claude-opus-4-8")
+        XCTAssertEqual(box.configuration?.effort, "high")
+        XCTAssertEqual(box.configuration?.permissionMode, "auto")
+    }
+
     private func freshDefaults() -> UserDefaults {
         UserDefaults(suiteName: "fabled-test-\(UUID().uuidString)")!
     }

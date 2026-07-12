@@ -261,7 +261,13 @@ public final class AppModel {
     /// The guard matches resumed OR fresh — a fresh session's own transcript
     /// is indexed while it runs, so Continue on its history row must select
     /// the live process, not spawn a second one on the same id.
-    public func resume(_ summary: SessionSummary, fork: Bool) async {
+    ///
+    /// `model`/`effort`/`permissionMode` let a caller (the resume composer)
+    /// override what the transcript/spawn defaults would otherwise pick —
+    /// nil for any of them keeps today's behavior, so every existing caller
+    /// (sidebar, tests) compiles and behaves unchanged.
+    public func resume(_ summary: SessionSummary, fork: Bool, model: String? = nil,
+                       effort: String? = nil, permissionMode: String? = nil) async {
         if !fork, let existing = liveSessions.first(
             where: { $0.resumedSessionID == summary.id
                 || $0.info?.sessionID == summary.id }) {
@@ -289,14 +295,22 @@ public final class AppModel {
         var configuration = SessionConfiguration(workingDirectory: resolved.url)
         configuration.resumeSessionID = summary.id
         configuration.forkSession = fork
-        configuration.effort = preferredEffort
+        configuration.effort = effort ?? preferredEffort
         // Sticky resume (UX-LEDGER row 15): come back on the model and mode the
         // session was last using, recovered from its transcript. A mode the
         // transcript never recorded falls back to the user's spawn default.
+        // An explicit override (the resume composer's chips) wins over both.
         let resumeState = (try? await store.resumeState(for: summary)) ?? SessionResumeState()
-        configuration.model = resumeState.model
-        configuration.permissionMode = resumeState.permissionMode ?? preferredPermissionMode
+        configuration.model = model ?? resumeState.model
+        configuration.permissionMode = permissionMode ?? resumeState.permissionMode ?? preferredPermissionMode
         await launch(configuration, seed: seed)
+    }
+
+    /// The model + permission a past chat last used (from its transcript), for
+    /// the resume composer to show before it resumes. Effort isn't recorded on
+    /// disk, so it isn't part of this.
+    public func resumeState(for summary: SessionSummary) async -> SessionResumeState {
+        (try? await store.resumeState(for: summary)) ?? SessionResumeState()
     }
 
     /// Type-to-resume (UX-LEDGER row 16): the composer on a past session resumes
@@ -305,10 +319,13 @@ public final class AppModel {
     /// Returns `true` only when it actually delivered (resumed to a live session
     /// AND sent); `false` on blank text or a resume that produced no live
     /// selection — so the composer can keep Ben's typed prose when a spawn fails.
-    public func resumeAndSend(_ summary: SessionSummary, text: String) async -> Bool {
+    /// `model`/`effort`/`permissionMode` pass straight through to `resume` —
+    /// see its doc for the override contract.
+    public func resumeAndSend(_ summary: SessionSummary, text: String, model: String? = nil,
+                              effort: String? = nil, permissionMode: String? = nil) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        await resume(summary, fork: false)
+        await resume(summary, fork: false, model: model, effort: effort, permissionMode: permissionMode)
         if case .live(let id) = selection,
            let session = liveSessions.first(where: { $0.id == id }) {
             session.send(trimmed)

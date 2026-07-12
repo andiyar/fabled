@@ -119,7 +119,12 @@ struct WelcomeView: View {
     // MARK: - Composer (B1.4 extends the chip row with model / effort / Auto)
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: Theme.spaceM) {
+        // ComposerChips binds to whatever the caller hands it (gate rework);
+        // here that's the sticky spawn defaults, so this chip row's
+        // behavior is unchanged from before the binding generalization —
+        // picking a value still writes app.preferred* for the next spawn.
+        @Bindable var app = app
+        return VStack(alignment: .leading, spacing: Theme.spaceM) {
             TextField("Message Claude to begin…", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
@@ -129,7 +134,9 @@ struct WelcomeView: View {
                 .onSubmit(startSession)
             HStack(spacing: Theme.spaceS) {
                 projectChip
-                ComposerChips()
+                ComposerChips(model: $app.preferredModel,
+                              effort: $app.preferredEffort,
+                              permission: $app.preferredPermissionMode)
                 Spacer(minLength: Theme.spaceS)
                 sendButton
             }
