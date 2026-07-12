@@ -165,16 +165,7 @@ struct ConversationView: View {
                 }
                 ModelPickerMenu(session: session)
                 EffortPickerMenu(session: session)
-                Picker("Permissions", selection: Binding(
-                    get: { session.permissionMode },
-                    set: { session.setPermissionMode($0) }
-                )) {
-                    Text("Default").tag("default")
-                    Text("Plan").tag("plan")
-                    Text("Accept Edits").tag("acceptEdits")
-                    Text("Bypass Permissions").tag("bypassPermissions")
-                }
-                .pickerStyle(.menu)
+                PermissionPickerMenu(session: session)
                 if session.cumulativeCostUSD > 0 {
                     Text(String(format: "$%.2f", session.cumulativeCostUSD))
                         .font(.caption).foregroundStyle(.secondary)

@@ -104,6 +104,14 @@ public actor SessionStore {
         return entries
     }
 
+    /// The model and permission mode a session was last operating in, read from
+    /// its on-disk transcript so a resume can restore them (UX-LEDGER row 15).
+    /// Runs on the store's actor, off the main thread, like `transcript(for:)`.
+    public func resumeState(for session: SessionSummary) throws -> SessionResumeState {
+        let data = try Data(contentsOf: session.fileURL, options: .mappedIfSafe)
+        return SessionResumeState.derive(fromFileData: data)
+    }
+
     /// On-disk subagent transcripts for a session, keyed by the parent's
     /// Task tool_use id (from each agent's meta.json — census 2026-07-11).
     /// Layout: <project>/<session-id>/subagents/agent-<agentId>.jsonl

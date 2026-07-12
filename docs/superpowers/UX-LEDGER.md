@@ -117,6 +117,22 @@ New rows from the sprint:
 | 31 | 07-12 | **Multi-select scoped to tagging** — Pin/Archive are per-row (right-click); select-many exists only to Tag… several at once | Ben: general bulk actions "more effort than it's worth," but multi-select "makes sense for tagging." 🎨 design-decided |
 | 32 | 07-12 | **Ben's tag workload is creative/academic, not just dev** — characters, scenes, chapters, papers, lit-review | Tags must scale (searchable, counts, delete/rename); colour reserved for projects (tags plain). See memory [[ben-creative-phd-use]]. Shapes rows 13/30. |
 
+## Permission hotfix — built (2026-07-12, session d97477de)
+
+Work Stream A of the design-sprint handoff. Status: 🔨 **BUILT, pending Ben's gate** (rule 4 — closes only when Ben verifies in a build). TDD'd; 301 tests green (10 new); macOS app builds; the fix's mechanism verified against the real CLI (2.1.206 comes up in `bypassPermissions` when spawned with `--permission-mode bypassPermissions`).
+
+Root cause confirmed in current code: neither `newSession` nor `resume` ever set `configuration.permissionMode`, so `--permission-mode` never reached the CLI — the only route was the toolbar wire op, which the CLI ignores. `resume` also built a bare config (no model, no mode).
+
+| Row | What shipped |
+|---|---|
+| **14** (permission modes do nothing) | FIXED — `preferredPermissionMode` (persisted, mirrors `preferredEffort`) is passed at every spawn via `--permission-mode`. New "Permissions" toolbar menu with a **New sessions** section sets it. Verified: the CLI honors the spawn flag. |
+| **15** (sticky model + mode on resume) | FIXED — `SessionResumeState.derive(fromFileData:)` recovers the last model (last assistant `message.model`) and last permission mode (last top-level `permissionMode`) from the transcript; `resume` restores both (mode falls back to the spawn default when the transcript recorded none). Works for CD-created sessions too. **The sidebar "last model" *display* is folded into the B3 sidebar rebuild (Ben's call 2026-07-12)** — the restore behavior already works and the toolbar shows the restored model; decorating the about-to-be-replaced sidebar would be throwaway. |
+| **18** (curated "Auto" mode) | DONE — "Auto" (wire `auto`) added to the mode menu. CD's "Auto" → `auto` confirmed empirically from Ben's real transcripts; no live CD probe needed. |
+
+Still Work Stream B (interim surface = the upgraded toolbar menu, not a regression): row **17** (composer-adjacent model/permission chips) and row **22** (model/effort on the start composer) — the designed home is the composer chips built in 4c/B1.
+
+New source: `Sources/ClaudeKit/SessionResumeState.swift`, `App/PermissionPickerMenu.swift`; `SessionStore.resumeState(for:)`; `AppModel.preferredPermissionMode` + a `launcher` test seam.
+
 ---
 
 *Sources: full transcript sweep 2026-07-11 (`~/.claude/projects/-Users-andiyar-Developer-Fabled/*.jsonl`, sessions `975e1785`, `9f8443da`, `409fdeca`, `03f7002f`, `5a018155`, `2b161833`) + 4b gate 2026-07-12. Companion docs: FOLLOWUPS.md (tech riders), DECISIONS.md (scope calls), plans/2026-07-10-cd-ui-digest.md (screenshot distillation).*

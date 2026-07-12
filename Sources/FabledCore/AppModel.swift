@@ -35,6 +35,25 @@ public final class AppModel {
     }
     private static let preferredEffortKey = "preferredEffort"
 
+    /// Permission mode passed to every new spawn via --permission-mode
+    /// (default|plan|acceptEdits|bypassPermissions|auto). Persisted; nil = CLI
+    /// default. This is the fix for UX-LEDGER row 14 — before it, no code path
+    /// passed the mode at spawn, so choosing "Bypass" did nothing. Session-scoped
+    /// changes go through ChatSession.setPermissionMode and don't touch this.
+    public var preferredPermissionMode: String? {
+        didSet {
+            defaults.set(preferredPermissionMode, forKey: Self.preferredPermissionModeKey)
+        }
+    }
+    private static let preferredPermissionModeKey = "preferredPermissionMode"
+
+    /// Spawns a live session from a configuration. Production launches the real
+    /// `claude` process; tests replace this to capture the configuration a spawn
+    /// would use without starting a process.
+    var launcher: (SessionConfiguration) async throws -> ChatSession = {
+        try await ChatSession.launch(configuration: $0)
+    }
+
     /// Sidebar organization (feature 18). Persisted as JSON.
     public var sidebarOptions = SidebarOptions() {
         didSet {
@@ -73,6 +92,7 @@ public final class AppModel {
                 .appendingPathComponent("Fabled/index.sqlite")
         self.index = try SearchIndex(databaseURL: dbURL, store: store)
         self.preferredEffort = defaults.string(forKey: Self.preferredEffortKey)
+        self.preferredPermissionMode = defaults.string(forKey: Self.preferredPermissionModeKey)
         if let data = defaults.data(forKey: Self.sidebarOptionsKey),
            let options = try? JSONDecoder().decode(SidebarOptions.self, from: data) {
             self.sidebarOptions = options
@@ -205,6 +225,7 @@ public final class AppModel {
         var configuration = SessionConfiguration(workingDirectory: directory)
         configuration.model = model
         configuration.effort = preferredEffort
+        configuration.permissionMode = preferredPermissionMode
         await launch(configuration, seed: [])
         if let firstMessage, case .live(let id) = selection,
            let session = liveSessions.first(where: { $0.id == id }) {
@@ -254,6 +275,12 @@ public final class AppModel {
         configuration.resumeSessionID = summary.id
         configuration.forkSession = fork
         configuration.effort = preferredEffort
+        // Sticky resume (UX-LEDGER row 15): come back on the model and mode the
+        // session was last using, recovered from its transcript. A mode the
+        // transcript never recorded falls back to the user's spawn default.
+        let resumeState = (try? await store.resumeState(for: summary)) ?? SessionResumeState()
+        configuration.model = resumeState.model
+        configuration.permissionMode = resumeState.permissionMode ?? preferredPermissionMode
         await launch(configuration, seed: seed)
     }
 
@@ -299,7 +326,7 @@ public final class AppModel {
 
     private func launch(_ configuration: SessionConfiguration, seed: [TimelineItem]) async {
         do {
-            let session = try await ChatSession.launch(configuration: configuration)
+            let session = try await launcher(configuration)
             session.seed(timeline: seed)
             liveSessions.append(session)
             session.onNoteworthy = { [weak self, weak session] event in

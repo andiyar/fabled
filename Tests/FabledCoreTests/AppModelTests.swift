@@ -203,6 +203,101 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selection, .live(live.id))
     }
 
+    // MARK: - Permission-mode hotfix (UX-LEDGER rows 14/15)
+
+    /// Captures the configuration a spawn would launch with, without a process.
+    private func captureLaunch(_ model: AppModel,
+                               into box: LaunchBox) {
+        model.launcher = { config in
+            box.configuration = config
+            let (connection, _, _) = makeFakeConnection()
+            return ChatSession(connection: connection,
+                               workingDirectory: config.workingDirectory,
+                               permissionMode: config.permissionMode ?? "default",
+                               model: config.model)
+        }
+    }
+
+    @MainActor
+    final class LaunchBox { var configuration: SessionConfiguration? }
+
+    func testNewSessionSpawnsWithPreferredPermissionMode() async throws {
+        // The core bug: a chosen mode never reached the CLI, so bypass still
+        // prompted. It must be passed as --permission-mode at spawn.
+        let (model, _) = try makeModel(defaults: freshDefaults())
+        model.preferredPermissionMode = "bypassPermissions"
+        let box = LaunchBox()
+        captureLaunch(model, into: box)
+        await model.newSession(at: URL(fileURLWithPath: "/tmp/demo"))
+        XCTAssertEqual(box.configuration?.permissionMode, "bypassPermissions")
+    }
+
+    func testNewSessionWithNoPreferredModeLeavesCLIDefault() async throws {
+        let (model, _) = try makeModel(defaults: freshDefaults())
+        let box = LaunchBox()
+        captureLaunch(model, into: box)
+        await model.newSession(at: URL(fileURLWithPath: "/tmp/demo"))
+        XCTAssertNil(box.configuration?.permissionMode,
+                     "nil preferred mode adds no flag — the CLI keeps its default")
+    }
+
+    func testPreferredPermissionModePersistsAcrossModels() throws {
+        let defaults = freshDefaults()
+        let (model, _) = try makeModel(defaults: defaults)
+        XCTAssertNil(model.preferredPermissionMode, "unset defaults to CLI default")
+        model.preferredPermissionMode = "plan"
+        let (reloaded, _) = try makeModel(defaults: defaults)
+        XCTAssertEqual(reloaded.preferredPermissionMode, "plan",
+                       "the persisted spawn default survives a relaunch")
+    }
+
+    func testResumeRestoresModelAndModeFromTranscript() async throws {
+        // Sticky resume: the tooluse fixture last ran on opus in "auto".
+        let (model, _) = try makeModel(defaults: freshDefaults())
+        await model.bootstrap()
+        let summary = try XCTUnwrap(model.history.first?.sessions.first {
+            $0.id == "21feb0f8-e41a-4f72-9efb-9232b5bb64de"
+        })
+        let box = LaunchBox()
+        captureLaunch(model, into: box)
+        await model.resume(summary, fork: false)
+        XCTAssertEqual(box.configuration?.model, "claude-opus-4-8",
+                       "resume comes back on the model it was last using")
+        XCTAssertEqual(box.configuration?.permissionMode, "auto",
+                       "and the mode it was last in")
+        XCTAssertEqual(box.configuration?.resumeSessionID,
+                       "21feb0f8-e41a-4f72-9efb-9232b5bb64de")
+    }
+
+    func testResumeFallsBackToPreferredModeWhenTranscriptHasNone() async throws {
+        let defaults = freshDefaults()
+        let (model, root) = try makeModel(defaults: defaults)
+        model.preferredPermissionMode = "acceptEdits"
+        // A transcript with a model but no recorded permission mode.
+        let project = root.appendingPathComponent("-tmp-fabled-demo")
+        let file = project.appendingPathComponent(
+            "bbbbbbbb-0000-0000-0000-000000000002.jsonl")
+        try Data(#"{"type":"assistant","message":{"model":"claude-sonnet-5","content":[]}}"#.utf8)
+            .write(to: file)
+        let summary = SessionSummary(
+            id: "bbbbbbbb-0000-0000-0000-000000000002",
+            project: ProjectFolder(flattenedName: "-tmp-fabled-demo",
+                                   originalPath: "/tmp/fabled/demo",
+                                   directoryURL: URL(fileURLWithPath: "/tmp/fabled/demo")),
+            fileURL: file, title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        let box = LaunchBox()
+        captureLaunch(model, into: box)
+        await model.resume(summary, fork: false)
+        XCTAssertEqual(box.configuration?.model, "claude-sonnet-5",
+                       "model is still restored from the transcript")
+        XCTAssertEqual(box.configuration?.permissionMode, "acceptEdits",
+                       "no recorded mode → the user's preferred spawn default")
+    }
+
+    private func freshDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "fabled-test-\(UUID().uuidString)")!
+    }
+
     @MainActor
     func testFallbackDirectoryIsFlagged() throws {
         let (model, _) = try makeModel()
