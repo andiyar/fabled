@@ -134,6 +134,26 @@ Still Work Stream B (interim surface = the upgraded toolbar menu, not a regressi
 
 New source: `Sources/ClaudeKit/SessionResumeState.swift`, `App/PermissionPickerMenu.swift`; `SessionStore.resumeState(for:)`; `AppModel.preferredPermissionMode` + a `launcher` test seam.
 
+## 4c B1 GATE RESULTS (2026-07-12, session 06fcac68 — Ben ran the built home + composer + resume + multi-folder)
+
+Ben ran the B1 build on the real app. Verdict: "a good try" → after same-session rework, clearly landing. He found real gaps; all were **reworked and re-verified with him the same session** (11 commits, R1–R4, branch pushed). He paused mid-nitpick to save + hand off.
+
+**CLOSED by this gate (Ben verified in the build — pending the final formal move into the Closed table next session):** 7 (legible home — "Lately" reads; trimmed to 3), 16 (type-to-resume — "old chat buttons gone yeay"), 17 (composer-adjacent controls, HOME — "model intensity and mode so great"; conversation composer = B2.2), 18 (curated Auto — in the permission chip), 22 (model/effort on the start composer), 23 (way back to welcome — Home now in the sidebar top toolbar), 33 (multi-folder — "yes… okay, I like the pills"). **Row 15 PARTIAL** — the resume box now shows the chat's real last model; the sidebar/history-header last-model label is still B3.5.
+
+**New feedback — all reworked + committed this session:**
+
+| # | Date | Comment (Ben, verbatim-ish) | Resolution |
+|---|------|------------------------------|------------|
+| 34 | 07-12 | Continue/Fork unwanted on a past chat — "i don't hit fork; if chat continues, the button isn't necessary" | Both removed from the past-chat toolbar (`f4ff348`). ✅ "yeay". (The sidebar right-click Continue/Fork context menu stays — unobtrusive, not his complaint.) |
+| 35 | 07-12 | Resume flew blind — "it doesn't say what the model was and it's defaulting to default default default… could switch all of those midstream → errors, cache hits" | Resume box now **shows + controls** the chat's real model + permission (from its transcript) and effort; overrides drive the resume (`22eef20`, TDD). ⚠️ Effort is NOT recorded on disk (`SessionResumeState` carries only model + permissionMode) → the effort chip shows the settable default, never a silent switch. ✅ "great" |
+| 36 | 07-12 | Open-folder only multi-selects **siblings** — "if I want ~/Downloads and ~/Developer/project/one, that's not possible" | Primary + **"Add folder…"** from ANY location, removable pills, `+N` (`76ad929`). Replaces the sibling-only panel. ✅ |
+| 37 | 07-12 | Home button in the wrong place (next to the chat title) | Out of the detail toolbars (R1) → sidebar top toolbar. ⚠️ `.navigation` placement re-hoisted it to the detail title ("home is next to the name of the session. Again.") → fixed to plain automatic `ToolbarItem` (`0c13314`). OPEN nit: left/right of the filter control. |
+| 38 | 07-12 | Home reads as "just a list" — "maybe it's because there are so many latelies… last three is enough" | Lately trimmed 8 → 3 (`f4ff348`). ✅ |
+| 39 | 07-12 | "The title 'Fabled' could be bigger" | Wordmark 22 → 34pt (`f4ff348`). ✅ |
+| 40 | 07-12 | Interface options "a teeny bit too small for easy pick" | Chips (shared `ChipLabel`) + folder pills enlarged, remove-× given a real tap target (`91f8092`/`0c13314`). Pending Ben's re-confirm. |
+
+**Deferred (Ben paused to save):** more nitpicks to come; row-37 Home L/R placement; first-cut looks to react to (pills shape, resume-effort presentation). Picked up next session before B2.
+
 ---
 
 *Sources: full transcript sweep 2026-07-11 (`~/.claude/projects/-Users-andiyar-Developer-Fabled/*.jsonl`, sessions `975e1785`, `9f8443da`, `409fdeca`, `03f7002f`, `5a018155`, `2b161833`) + 4b gate 2026-07-12. Companion docs: FOLLOWUPS.md (tech riders), DECISIONS.md (scope calls), plans/2026-07-10-cd-ui-digest.md (screenshot distillation).*
