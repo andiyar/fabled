@@ -251,6 +251,25 @@ final class AppModelTests: XCTestCase {
                        "the persisted spawn default survives a relaunch")
     }
 
+    // MARK: - Sticky preferred model (UX-LEDGER row 22)
+
+    func testPreferredModelPersistsAndSpawns() async throws {
+        // The start composer's model choice must persist and seed the next
+        // spawn — mirroring preferredPermissionMode / preferredEffort. A nil
+        // model at the newSession call falls back to the stored preference.
+        let defaults = freshDefaults()
+        let (model, _) = try makeModel(defaults: defaults)
+        model.preferredModel = "claude-opus-4-8"
+        let box = LaunchBox()
+        captureLaunch(model, into: box)
+        await model.newSession(at: URL(fileURLWithPath: "/tmp/demo"))
+        XCTAssertEqual(box.configuration?.model, "claude-opus-4-8",
+                       "the persisted spawn default seeds a nil-model spawn")
+        let (reloaded, _) = try makeModel(defaults: defaults)
+        XCTAssertEqual(reloaded.preferredModel, "claude-opus-4-8",
+                       "the persisted preferred model survives a relaunch")
+    }
+
     func testResumeRestoresModelAndModeFromTranscript() async throws {
         // Sticky resume: the tooluse fixture last ran on opus in "auto".
         let (model, _) = try makeModel(defaults: freshDefaults())

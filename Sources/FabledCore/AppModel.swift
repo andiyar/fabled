@@ -47,6 +47,18 @@ public final class AppModel {
     }
     private static let preferredPermissionModeKey = "preferredPermissionMode"
 
+    /// Model applied to every new spawn that doesn't name its own (the start
+    /// composer's picker, UX-LEDGER row 22). Persisted; nil = CLI default.
+    /// A caller passing an explicit model to `newSession` overrides this;
+    /// session-scoped changes go through ChatSession.setModel and don't touch
+    /// this.
+    public var preferredModel: String? {
+        didSet {
+            defaults.set(preferredModel, forKey: Self.preferredModelKey)
+        }
+    }
+    private static let preferredModelKey = "preferredModel"
+
     /// Spawns a live session from a configuration. Production launches the real
     /// `claude` process; tests replace this to capture the configuration a spawn
     /// would use without starting a process.
@@ -93,6 +105,7 @@ public final class AppModel {
         self.index = try SearchIndex(databaseURL: dbURL, store: store)
         self.preferredEffort = defaults.string(forKey: Self.preferredEffortKey)
         self.preferredPermissionMode = defaults.string(forKey: Self.preferredPermissionModeKey)
+        self.preferredModel = defaults.string(forKey: Self.preferredModelKey)
         if let data = defaults.data(forKey: Self.sidebarOptionsKey),
            let options = try? JSONDecoder().decode(SidebarOptions.self, from: data) {
             self.sidebarOptions = options
@@ -223,7 +236,7 @@ public final class AppModel {
     public func newSession(at directory: URL, model: String? = nil,
                            firstMessage: String? = nil) async {
         var configuration = SessionConfiguration(workingDirectory: directory)
-        configuration.model = model
+        configuration.model = model ?? preferredModel
         configuration.effort = preferredEffort
         configuration.permissionMode = preferredPermissionMode
         await launch(configuration, seed: [])
