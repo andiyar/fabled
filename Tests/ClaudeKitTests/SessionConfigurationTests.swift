@@ -154,4 +154,20 @@ final class SessionConfigurationTests: XCTestCase {
         XCTAssertEqual(addDirIndices.count, 2)
         XCTAssertEqual(addDirIndices.map { args[$0 + 1] }, ["/tmp/notes", "/tmp/data"])
     }
+
+    /// A dir with a space must reach argv as the literal filesystem path, NOT a
+    /// percent-encoded `file://` URL. This pins `dir.path` (not
+    /// `dir.absoluteString`) in `arguments()`: the CLI receives argv entries
+    /// directly (no shell), so `/tmp/My Notes` is one already-tokenized arg —
+    /// `absoluteString` would emit `file:///tmp/My%20Notes` and break access.
+    func testAdditionalDirectoryPreservesSpacesAsLiteralPath() {
+        var config = SessionConfiguration(workingDirectory: URL(fileURLWithPath: "/tmp/primary"))
+        config.additionalDirectories = [URL(fileURLWithPath: "/tmp/My Notes")]
+        let args = config.arguments()
+        guard let index = args.firstIndex(of: "--add-dir") else {
+            return XCTFail("--add-dir missing from \(args)")
+        }
+        XCTAssertEqual(args[index + 1], "/tmp/My Notes",
+                       "literal path with the space, no percent-encoding, no file:// scheme")
+    }
 }

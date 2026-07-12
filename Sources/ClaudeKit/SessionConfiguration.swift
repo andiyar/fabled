@@ -18,6 +18,10 @@ public struct SessionConfiguration: Sendable {
     /// Extra roots the CLI may access, beyond `workingDirectory`, emitted as
     /// repeated `--add-dir <path>` flags. UX-LEDGER row 33 (dual-use /
     /// multi-folder sessions, e.g. a manuscript folder + a notes folder).
+    /// `AppModel.resume()` intentionally does NOT re-emit these: the on-disk
+    /// transcript can't replay added dirs, so carrying them across resume is a
+    /// flagged v1 limitation — don't thread this into resume for symmetry
+    /// without first solving that (the dirs would be silently dropped).
     public var additionalDirectories: [URL] = []
     public var extraArguments: [String] = []
 
