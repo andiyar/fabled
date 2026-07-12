@@ -6,3 +6,7 @@ xcuserdata/
 DerivedData/
 .DS_Store
 .worktrees/
+
+# Design source screenshots — intentionally untracked (Ben 2026-07-12, UX-LEDGER row 20).
+# 46 MB of CD/Fabled reference PNGs; the design is captured in docs/superpowers/design/ mockups.
+Screenshots for GUI etc/
