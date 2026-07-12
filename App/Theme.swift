@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import FabledCore
 
 /// Fabled design tokens, v1 (2026-07-11). The language is Fabled's own —
 /// seeded by the harp icon's palette (aged bronze, midnight teal, code-glow)
@@ -7,16 +8,7 @@ import AppKit
 /// Rules: App views take every color, font, spacing, radius, and animation
 /// from here. A raw literal in a view is a review failure.
 enum Theme {
-    // MARK: - Palette
-
-    /// Claude clay (#D97757) — send button, working state, warm accents.
-    static let clay = Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255)
-    /// Aged harp bronze (#B08D57) — brand chrome: wordmark, selected chips.
-    static let bronze = Color(red: 0xB0 / 255, green: 0x8D / 255, blue: 0x57 / 255)
-    /// Midnight teal (#12333B) — the icon's field; welcome backdrop in dark.
-    static let midnightTeal = Color(red: 0x12 / 255, green: 0x33 / 255, blue: 0x3B / 255)
-    /// Code-glow (#69D2B4) — the strings' phosphor; sparing highlights only.
-    static let glow = Color(red: 0x69 / 255, green: 0xD2 / 255, blue: 0xB4 / 255)
+    // MARK: - Palette (mode-aware, from FabledCore.Palette)
 
     /// Light/dark-adaptive color without an asset catalog entry.
     static func dynamic(light: NSColor, dark: NSColor) -> Color {
@@ -25,21 +17,63 @@ enum Theme {
         })
     }
 
-    /// Welcome backdrop: whisper of teal in dark, warm paper in light.
-    static let welcomeBackdrop = dynamic(
-        light: NSColor(red: 0.97, green: 0.96, blue: 0.94, alpha: 1),
-        dark: NSColor(red: 0.07, green: 0.13, blue: 0.15, alpha: 1))
+    /// Pack a 0xRRGGBB hex into an sRGB NSColor at the given alpha.
+    private static func ns(_ hex: UInt32, alpha: Double) -> NSColor {
+        NSColor(srgbRed: Double((hex >> 16) & 0xFF) / 255,
+                green: Double((hex >> 8) & 0xFF) / 255,
+                blue: Double(hex & 0xFF) / 255, alpha: alpha)
+    }
+    /// Bridge one locked `Palette.Tone` to a mode-aware SwiftUI Color.
+    static func token(_ tone: Palette.Tone) -> Color {
+        dynamic(light: ns(tone.light, alpha: tone.lightAlpha),
+                dark: ns(tone.dark, alpha: tone.darkAlpha))
+    }
+    // Surfaces
+    static let ground = token(Palette.ground)
+    static let surfaceSide = token(Palette.surfaceSide)
+    static let panel = token(Palette.panel)
+    static let panelRecessed = token(Palette.panelRecessed)
+    static let hairline = token(Palette.hairline)
+    static let windowBorder = token(Palette.windowBorder)
+    // Text
+    static let ink = token(Palette.ink)
+    static let muted = token(Palette.muted)
+    static let faint = token(Palette.faint)
+    // Accent + status
+    static let accentBronze = token(Palette.accent)
+    static let accent2 = token(Palette.accent2)
+    static let live = token(Palette.live)
+    static let needsYou = token(Palette.needsYou)
+    static let review = token(Palette.review)
+    static let diffAddColor = token(Palette.diffAdd)
+    static let diffDelColor = token(Palette.diffDel)
+
+    // MARK: - Brand (retuned to the mode-aware palette)
+
+    /// Claude clay (#D97757) — send button, working state, warm accents.
+    static let clay = Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255)
+    /// Aged harp bronze — brand chrome: wordmark, selected chips.
+    /// Now mode-aware via `Palette.accent` (bronze in dark, umber in light).
+    static let bronze = accentBronze
+    /// Welcome backdrop — the app ground (Teal Midnight dark / Linen light).
+    static let welcomeBackdrop = ground
 
     // MARK: - Status (color + shape + words, never color alone — feature 14)
 
-    /// Needs input — unmissable orange. Icon: exclamationmark.bubble.fill.
-    static let statusNeedsInput = Color(red: 0xE0 / 255, green: 0x8A / 255, blue: 0x3C / 255)
-    /// Working — clay. Icon: circle.dotted.circle.
-    static let statusWorking = clay
+    /// Needs input — unmissable amber. Icon: exclamationmark.bubble.fill.
+    static let statusNeedsInput = needsYou
+    /// Working — live teal. Icon: circle.dotted.circle.
+    static let statusWorking = live
     /// Idle-with-history / ready for review — calm blue. Icon: tray.full.
-    static let statusReady = Color(red: 0x4E / 255, green: 0x8F / 255, blue: 0xD1 / 255)
+    static let statusReady = review
     /// Ended / archived — neutral. Icon: moon.zzz.
     static let statusEnded = Color.secondary
+
+    // MARK: - Wordmark
+
+    /// Wordmark colour + size to match the mockup's 22 pt serif "Fabled".
+    static let wordmarkColor = token(Palette.accent)
+    static let wordmark = Font.system(size: 22, design: .serif).weight(.semibold)
 
     // MARK: - Type
 

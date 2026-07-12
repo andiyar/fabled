@@ -22,6 +22,7 @@ struct RootView: View {
             detail
         }
         .frame(minWidth: 900, minHeight: 560)
+        .background(Theme.ground)
         .onChange(of: pendingApprovals) { _, count in
             NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
         }
