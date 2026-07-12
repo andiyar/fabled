@@ -129,6 +129,7 @@ struct WelcomeView: View {
                 .onSubmit(startSession)
             HStack(spacing: Theme.spaceS) {
                 projectChip
+                ComposerChips(target: .newSession)
                 Spacer(minLength: Theme.spaceS)
                 sendButton
             }
