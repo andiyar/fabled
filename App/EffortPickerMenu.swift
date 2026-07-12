@@ -49,10 +49,13 @@ struct EffortPickerMenu: View {
                 }
             }
         } label: {
-            Label(session.currentEffort?.capitalized ?? "Effort",
-                  systemImage: "gauge.with.needle")
-                .labelStyle(.titleAndIcon)
+            ChipLabel(icon: "gauge.with.needle",
+                      label: session.currentEffort?.capitalized ?? "Effort",
+                      textColor: Theme.ink)
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .help("Model effort — lower is faster")
     }
 

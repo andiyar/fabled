@@ -45,9 +45,11 @@ struct ModelPickerMenu: View {
             Divider()
             Button("Custom Model…") { isCustomSheetPresented = true }
         } label: {
-            Label(currentDisplayName, systemImage: "cpu")
-                .labelStyle(.titleAndIcon)
+            ChipLabel(icon: "cpu", label: currentDisplayName, textColor: Theme.accentBronze)
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .sheet(isPresented: $isCustomSheetPresented) {
             VStack(spacing: 12) {
                 Text("Custom model ID").font(.headline)

@@ -37,9 +37,11 @@ struct PermissionPickerMenu: View {
                 }
             }
         } label: {
-            Label(currentTitle, systemImage: "lock.shield")
-                .labelStyle(.titleAndIcon)
+            ChipLabel(icon: "lock.shield", label: currentTitle, textColor: Theme.ink)
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .help("Permission mode — the New sessions choice is applied at launch")
     }
 

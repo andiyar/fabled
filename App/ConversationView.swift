@@ -164,9 +164,6 @@ struct ConversationView: View {
                         .monospacedDigit()
                         .help("Active model")
                 }
-                ModelPickerMenu(session: session)
-                EffortPickerMenu(session: session)
-                PermissionPickerMenu(session: session)
                 if session.cumulativeCostUSD > 0 {
                     Text(String(format: "$%.2f", session.cumulativeCostUSD))
                         .font(.caption).foregroundStyle(.secondary)
