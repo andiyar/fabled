@@ -156,10 +156,6 @@ struct ConversationView: View {
             if new == nil { inspectBackStack.removeAll() }
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button { app.goHome() } label: { Label("Home", systemImage: "house") }
-                    .help("Back to the home inbox")
-            }
             ToolbarItemGroup {
                 if session.currentModel != nil {
                     Text(activeModelLabel)

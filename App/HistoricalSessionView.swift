@@ -122,10 +122,6 @@ struct HistoricalSessionView: View {
             if new == nil { inspectBackStack.removeAll() }
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button { app.goHome() } label: { Label("Home", systemImage: "house") }
-                    .help("Back to the home inbox")
-            }
             ToolbarItemGroup {
                 // Independent presentation-path affordance (matches
                 // ConversationView) — verifiable without clicking a row.
@@ -136,11 +132,6 @@ struct HistoricalSessionView: View {
                 }
                 .help("Toggle inspector")
                 .keyboardShortcut("i", modifiers: [.command, .option])
-                Button("Continue") { Task { await app.resume(summary, fork: false) } }
-                    .buttonStyle(.borderedProminent).tint(Theme.clay)
-                    .help("Reattach a live session to this same session id")
-                Button("Fork") { Task { await app.resume(summary, fork: true) } }
-                    .help("Branch a NEW session seeded with this history")
             }
         }
         .task(id: summary.id) {

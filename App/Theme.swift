@@ -71,9 +71,9 @@ enum Theme {
 
     // MARK: - Wordmark
 
-    /// Wordmark colour + size to match the mockup's 22 pt serif "Fabled".
+    /// Wordmark colour + size to match the mockup's 34 pt serif "Fabled".
     static let wordmarkColor = token(Palette.accent)
-    static let wordmark = Font.system(size: 22, design: .serif).weight(.semibold)
+    static let wordmark = Font.system(size: 34, design: .serif).weight(.semibold)
 
     // MARK: - Type
 

@@ -93,7 +93,7 @@ struct WelcomeView: View {
     private var latelySection: some View {
         VStack(alignment: .leading, spacing: Theme.spaceS) {
             sectionTitle("Lately")
-            let recents = app.welcomeRecents(limit: 8)
+            let recents = app.welcomeRecents(limit: 3)
             if recents.isEmpty {
                 Text("No sessions yet — open a folder to begin.")
                     .font(.system(size: 13))
