@@ -8,7 +8,6 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var app = app
         List(selection: $app.selection) {
-            homeRow
             if !app.searchQuery.isEmpty {
                 searchResults
             } else {
@@ -27,6 +26,12 @@ struct SidebarView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button { app.goHome() } label: {
+                    Label("Home", systemImage: "house")
+                }
+                .help("Back to the home inbox")
+            }
             ToolbarItem {
                 Menu {
                     Picker("Group by", selection: $app.sidebarOptions.groupBy) {
@@ -52,27 +57,6 @@ struct SidebarView: View {
                 .help("Group, sort, and filter sessions")
             }
         }
-    }
-
-    /// Always-visible way back to the welcome inbox (UX-LEDGER row 23: no
-    /// return-to-welcome). `Selection` has no case for it, so it can't
-    /// `.tag()` into the List's selection binding like a session row does —
-    /// a plain button sidesteps that binding entirely while still sitting
-    /// in the row flow, top of list, above Live.
-    private var homeRow: some View {
-        Button {
-            app.goHome()
-        } label: {
-            HStack(spacing: Theme.spaceS) {
-                Image(systemName: "house")
-                    .foregroundStyle(Theme.accentBronze)
-                Text("Home")
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     @ViewBuilder private var liveSection: some View {

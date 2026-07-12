@@ -284,21 +284,23 @@ private struct AdditionalFolderPill: View {
     var body: some View {
         HStack(spacing: Theme.spaceXS) {
             Image(systemName: "folder")
-                .font(.system(size: 9))
+                .font(.system(size: 11))
                 .foregroundStyle(Theme.accentBronze)
             Text(url.lastPathComponent)
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(Theme.muted)
                 .lineLimit(1)
             Button(action: remove) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Theme.faint)
+                    .padding(2)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, Theme.spaceS)
-        .padding(.vertical, 3)
+        .padding(.horizontal, Theme.spaceM)
+        .padding(.vertical, Theme.spaceXS + 1)
         .background(Theme.panelRecessed, in: Capsule())
         .overlay {
             Capsule().strokeBorder(Theme.hairline, lineWidth: 1)

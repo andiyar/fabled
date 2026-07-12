@@ -20,9 +20,9 @@ struct ChipLabel: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(Theme.faint)
         }
-        .font(.system(size: 12))
-        .padding(.horizontal, Theme.spaceS)
-        .padding(.vertical, Theme.spaceXS + 1)
+        .font(.system(size: 13))
+        .padding(.horizontal, Theme.spaceM)
+        .padding(.vertical, Theme.spaceS)
         .background(Theme.panelRecessed, in: RoundedRectangle(cornerRadius: Theme.radiusCard))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.radiusCard)
