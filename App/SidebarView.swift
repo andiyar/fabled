@@ -26,7 +26,7 @@ struct SidebarView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem {
                 Button { app.goHome() } label: {
                     Label("Home", systemImage: "house")
                 }
