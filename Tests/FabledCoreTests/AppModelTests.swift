@@ -372,7 +372,8 @@ final class AppModelTests: XCTestCase {
                                    directoryURL: URL(fileURLWithPath: "/tmp/demo")),
             fileURL: URL(fileURLWithPath: "/tmp/demo/sess-1.jsonl"),
             title: "t", lastActivity: .now, approximateSizeBytes: 1)
-        await model.resumeAndSend(summary, text: "keep going")
+        let delivered = await model.resumeAndSend(summary, text: "keep going")
+        XCTAssertTrue(delivered, "a spawn that lands a live session reports success")
         // (1) it reattached the SAME id, no fork (one-process invariant)
         XCTAssertEqual(box.configuration?.resumeSessionID, "sess-1")
         XCTAssertEqual(box.configuration?.forkSession, false)
@@ -386,5 +387,34 @@ final class AppModelTests: XCTestCase {
             if case .userMessage(_, let text) = $0 { return text == "keep going" }
             return false
         }, "the first message is delivered to the resumed session")
+    }
+
+    @MainActor
+    func testResumeAndSendReattachesExistingLiveSession() async throws {
+        // The regression-prone path: Continue-collision. A live session already
+        // holds this id, so resumeAndSend must land the message in THAT session
+        // (selected, one process) — never spawn a second on the same id.
+        let (model, _) = try makeModel(defaults: freshDefaults())
+        let (connection, _, _) = makeFakeConnection()
+        let live = ChatSession(
+            connection: connection,
+            workingDirectory: URL(fileURLWithPath: "/tmp/demo"),
+            resumedSessionID: "abc-123")
+        model.adoptForTesting(live)
+        let summary = SessionSummary(
+            id: "abc-123",
+            project: ProjectFolder(flattenedName: "-tmp-demo",
+                                   originalPath: "/tmp/demo",
+                                   directoryURL: URL(fileURLWithPath: "/tmp/demo")),
+            fileURL: URL(fileURLWithPath: "/tmp/demo/abc-123.jsonl"),
+            title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        let delivered = await model.resumeAndSend(summary, text: "more please")
+        XCTAssertTrue(delivered)
+        XCTAssertEqual(model.liveSessions.count, 1, "reattached — no second process")
+        XCTAssertEqual(model.selection, .live(live.id))
+        XCTAssertTrue(live.timeline.contains {
+            if case .userMessage(_, let text) = $0 { return text == "more please" }
+            return false
+        }, "the message lands in the pre-existing live session, not a new one")
     }
 }

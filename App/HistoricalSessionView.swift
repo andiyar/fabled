@@ -212,6 +212,8 @@ struct HistoricalSessionView: View {
 
     private func sendAndResume() {
         guard canSendResume else { return }
-        Task { await app.resumeAndSend(summary, text: draft); draft = "" }
+        // Clear only on delivery — a failed spawn keeps Ben's typed prose
+        // (he resumes with novel/thesis paragraphs) instead of wiping it.
+        Task { if await app.resumeAndSend(summary, text: draft) { draft = "" } }
     }
 }

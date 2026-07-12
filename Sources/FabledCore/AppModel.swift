@@ -302,14 +302,19 @@ public final class AppModel {
     /// Type-to-resume (UX-LEDGER row 16): the composer on a past session resumes
     /// it (Continue = same id, one-process invariant) and delivers the first
     /// message. Routes through `resume(_:fork:false)` — never a second process.
-    public func resumeAndSend(_ summary: SessionSummary, text: String) async {
+    /// Returns `true` only when it actually delivered (resumed to a live session
+    /// AND sent); `false` on blank text or a resume that produced no live
+    /// selection — so the composer can keep Ben's typed prose when a spawn fails.
+    public func resumeAndSend(_ summary: SessionSummary, text: String) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return false }
         await resume(summary, fork: false)
         if case .live(let id) = selection,
            let session = liveSessions.first(where: { $0.id == id }) {
             session.send(trimmed)
+            return true
         }
+        return false
     }
 
     /// Dismisses the launch-failure alert (RootView's binding calls this).
