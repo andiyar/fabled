@@ -129,7 +129,7 @@ struct WelcomeView: View {
                 .onSubmit(startSession)
             HStack(spacing: Theme.spaceS) {
                 projectChip
-                ComposerChips(target: .newSession)
+                ComposerChips()
                 Spacer(minLength: Theme.spaceS)
                 sendButton
             }
@@ -162,23 +162,8 @@ struct WelcomeView: View {
             Divider()
             Button("Open folder…", action: newSession)
         } label: {
-            HStack(spacing: Theme.spaceXS) {
-                Image(systemName: "folder")
-                    .foregroundStyle(Theme.accentBronze)
-                Text(targetProject?.displayName ?? "Choose project")
-                    .foregroundStyle(Theme.ink)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Theme.faint)
-            }
-            .font(.system(size: 12))
-            .padding(.horizontal, Theme.spaceS)
-            .padding(.vertical, Theme.spaceXS + 1)
-            .background(Theme.panelRecessed, in: RoundedRectangle(cornerRadius: 8))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Theme.hairline, lineWidth: 1)
-            }
+            ChipLabel(icon: "folder",
+                      label: targetProject?.displayName ?? "Choose project")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
