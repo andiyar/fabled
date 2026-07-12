@@ -1,0 +1,228 @@
+<title>Fabled — tags, refined</title>
+<style>
+  :root{
+    --wall:#ECEEEC; --wall-panel:#F4F6F4; --wall-ink:#1C2422; --wall-muted:#5f6a67; --wall-faint:#8b9793; --wall-line:#d9e0dd; --wall-accent:#9C6F32;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+    --serif:ui-serif,"New York",Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--wall:#0A1315; --wall-panel:#10201F; --wall-ink:#E7EBE7; --wall-muted:#92a09a; --wall-faint:#5f716a; --wall-line:rgba(130,165,155,.16); --wall-accent:#CFA669}}
+  :root[data-theme="light"]{--wall:#ECEEEC; --wall-panel:#F4F6F4; --wall-ink:#1C2422; --wall-muted:#5f6a67; --wall-faint:#8b9793; --wall-line:#d9e0dd; --wall-accent:#9C6F32}
+  :root[data-theme="dark"]{--wall:#0A1315; --wall-panel:#10201F; --wall-ink:#E7EBE7; --wall-muted:#92a09a; --wall-faint:#5f716a; --wall-line:rgba(130,165,155,.16); --wall-accent:#CFA669}
+
+  *{box-sizing:border-box} body{margin:0}
+  .board{background:var(--wall); color:var(--wall-ink); font-family:var(--sans); padding:44px 24px 80px; line-height:1.5; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px; margin:0 auto}
+  .eyebrow{font:600 11.5px/1 var(--sans); letter-spacing:.16em; text-transform:uppercase; color:var(--wall-accent); margin:0 0 14px}
+  h1.title{font-family:var(--serif); font-weight:600; font-size:clamp(30px,5vw,44px); letter-spacing:-.01em; margin:0 0 14px; text-wrap:balance}
+  .lede{font-size:16px; color:var(--wall-muted); max-width:70ch; margin:0}
+  .lede b{color:var(--wall-ink); font-weight:600}
+  .sec-label{font:600 12px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase; color:var(--wall-faint); margin:32px 0 16px}
+
+  .teal{--g:#0C1618; --side:#0A1315; --panel:#122120; --panel2:#0F1C1D; --ink:#E9EEEA; --muted:#8EA29A; --faint:#5C6F68; --line:rgba(120,160,150,.15); --accent:#CFA669; --glow:#5AC9B4}
+  .sbwin{border-radius:12px; overflow:hidden; border:1px solid #1d2e2d; box-shadow:0 30px 70px -28px rgba(6,14,16,.7); background:var(--g); color:var(--ink); font-size:13px; display:grid; grid-template-rows:auto 1fr}
+  .titlebar{display:flex; align-items:center; gap:12px; padding:0 14px; height:46px; background:var(--side); border-bottom:1px solid var(--line)}
+  .lights{display:flex; gap:8px} .lights i{width:12px;height:12px;border-radius:50%;display:block}
+  .lights .r{background:#ED6A5E} .lights .y{background:#F4BF4F} .lights .g{background:#61C554}
+  .tb-home{display:inline-flex; align-items:center; gap:6px; font-weight:600; color:var(--ink); padding:5px 9px; border-radius:7px; background:var(--panel); box-shadow:inset 0 0 0 1px var(--line); font-size:12px}
+  .tb-home svg{width:13px;height:13px}
+  .tb-title{font-family:var(--serif); font-weight:600; font-size:14px; margin-left:2px}
+
+  .sbbody{display:grid; grid-template-columns:308px 1fr; min-height:600px}
+  @media (max-width:720px){.sbbody{grid-template-columns:1fr}}
+  .sb{background:var(--side); border-right:1px solid var(--line); display:flex; flex-direction:column; min-width:0; position:relative}
+  .sb-top{padding:12px 11px 8px; border-bottom:1px solid var(--line)}
+  .sb-search{display:flex; align-items:center; gap:7px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:7px 9px; color:var(--faint); font-size:12.5px; margin-bottom:10px}
+  .sb-search svg{width:13px;height:13px;opacity:.7}
+  .tfilter{display:flex; gap:6px; flex-wrap:wrap}
+  .tfchip{display:inline-flex; align-items:center; gap:5px; font:600 11px/1 var(--sans); color:var(--muted); background:var(--panel2); border:1px solid var(--line); border-radius:999px; padding:5px 10px}
+  .tfchip.on{color:var(--ink); background:var(--panel); box-shadow:inset 0 0 0 1px rgba(207,166,105,.5)}
+  .tfchip.add{color:var(--faint)}
+
+  .sb-scroll{padding:12px 9px; overflow:hidden; flex:1}
+  .grp-hd{font:600 10.5px/1 var(--sans); letter-spacing:.09em; text-transform:uppercase; color:var(--faint); margin:4px 6px 8px}
+  .srow{padding:8px 10px; border-radius:9px; margin-bottom:3px}
+  .srow:hover{background:var(--panel2)}
+  .srow.sel{background:var(--panel); box-shadow:inset 0 0 0 1px var(--line)}
+  .srow .st{font-weight:500; font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:8px}
+  .srow .st .rt{margin-left:auto; font-size:11px; color:var(--faint); font-weight:400}
+  .tags{display:flex; gap:5px; margin-top:6px; flex-wrap:wrap}
+  .tg{display:inline-flex; align-items:center; gap:4px; font:600 10px/1 var(--sans); padding:3px 7px; border-radius:5px; background:var(--panel2); border:1px solid var(--line); color:var(--muted)}
+  .tg svg{width:9px;height:9px;opacity:.6}
+
+  /* tag popover — searchable, plain */
+  .tagpop{position:absolute; top:150px; left:150px; width:224px; z-index:6; background:#132322; border:1px solid rgba(130,165,155,.28); border-radius:11px; box-shadow:0 22px 46px -16px rgba(0,0,0,.75); padding:9px}
+  .tp-hd{display:flex; align-items:center; padding:4px 6px 8px}
+  .tp-hd .h{font:600 10px/1 var(--sans); letter-spacing:.1em; text-transform:uppercase; color:var(--faint)}
+  .tp-hd .edit{margin-left:auto; font:600 11px/1 var(--sans); color:var(--accent)}
+  .tp-search{display:flex; align-items:center; gap:7px; background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:6px 8px; color:var(--faint); font-size:12px; margin:0 2px 8px}
+  .tp-search svg{width:12px;height:12px;opacity:.7}
+  .tp-list{max-height:none}
+  .tp-item{display:flex; align-items:center; gap:9px; padding:6px 7px; border-radius:7px; font-size:12.5px; color:var(--ink)}
+  .tp-item:hover{background:var(--panel)}
+  .tp-box{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--faint); flex:none; display:inline-flex; align-items:center; justify-content:center}
+  .tp-item.on .tp-box{background:var(--accent); border-color:var(--accent)}
+  .tp-box svg{width:10px;height:10px;color:#0C1618;opacity:0} .tp-item.on .tp-box svg{opacity:1}
+  .tp-item .cnt{margin-left:auto; font-size:10.5px; color:var(--faint)}
+  .tp-div{height:1px; background:var(--line); margin:7px 4px}
+  .tp-new{display:flex; align-items:center; gap:8px; padding:6px 7px; color:var(--accent); font-size:12.5px; font-weight:600}
+  .tp-new svg{width:13px;height:13px}
+
+  .main-faint{background:var(--g); position:relative; overflow:hidden}
+  .main-faint::after{content:""; position:absolute; inset:0; background:linear-gradient(90deg, rgba(12,22,24,0), rgba(12,22,24,.72) 58%, rgba(12,22,24,.93))}
+  .mf-inner{padding:28px 32px; opacity:.55}
+  .mf-h{font-family:var(--serif); font-size:22px; color:var(--ink); margin:0 0 10px; display:flex; align-items:center; gap:10px}
+  .mf-h .tg{font-size:10px}
+  .mf-p{font-size:13px; color:var(--muted); max-width:42ch; line-height:1.6; margin:0}
+
+  /* manage tags card */
+  .managewrap{display:grid; grid-template-columns:360px 1fr; gap:24px; align-items:start; margin-top:6px}
+  @media (max-width:720px){.managewrap{grid-template-columns:1fr}}
+  .manage{border-radius:12px; overflow:hidden; border:1px solid #1d2e2d; background:var(--side)}
+  .mg-hd{display:flex; align-items:center; padding:12px 14px; border-bottom:1px solid var(--line)}
+  .mg-hd .h{font-family:var(--serif); font-weight:600; font-size:14px; color:var(--ink)}
+  .mg-hd .done{margin-left:auto; font:600 11.5px/1 var(--sans); color:var(--accent)}
+  .mg-body{padding:11px 12px}
+  .mg-row{display:flex; align-items:center; gap:10px; padding:8px 11px; border:1px solid var(--line); border-radius:8px; margin-bottom:7px; background:var(--panel)}
+  .mg-row .nm{flex:1; font-size:12.5px; color:var(--ink)}
+  .mg-row .cnt{font-size:10.5px; color:var(--faint)}
+  .mg-row .ico{width:15px;height:15px; flex:none}
+  .mg-row .ren{color:var(--muted)} .mg-row .del{color:#E7897B}
+  .mg-row.editing{box-shadow:0 0 0 1.5px var(--accent); border-color:transparent}
+  .mg-row.editing .nm{color:var(--accent)}
+  .mg-caret{display:inline-block;width:1.5px;height:14px;background:var(--accent);vertical-align:-2px;margin-left:1px;animation:blink 1.1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .mg-txt h4{font-family:var(--serif); font-size:18px; font-weight:600; margin:0 0 8px}
+  .mg-txt p{font-size:13.5px; color:var(--wall-muted); margin:0 0 9px} .mg-txt p b{color:var(--wall-ink); font-weight:600}
+
+  .notes{display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:24px}
+  @media (max-width:760px){.notes{grid-template-columns:1fr}}
+  .ncard{background:var(--wall-panel); border:1px solid var(--wall-line); border-radius:12px; padding:16px 17px}
+  .ncard .ni{font-family:var(--serif); font-size:16px; font-weight:600; margin:0 0 5px}
+  .ncard p{font-size:13px; color:var(--wall-muted); margin:0} .ncard p b{color:var(--wall-ink); font-weight:600}
+
+  .qs{margin-top:26px; background:var(--wall-panel); border:1px solid var(--wall-line); border-radius:12px; padding:18px 20px}
+  .qs h3{font-family:var(--serif); font-size:18px; font-weight:600; margin:0 0 12px}
+  .qs ol{margin:0; padding-left:20px}
+  .qs li{font-size:13.5px; color:var(--wall-muted); margin-bottom:9px} .qs li b{color:var(--wall-ink); font-weight:600}
+</style>
+
+<div class="board">
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Design · round 10 · tags, refined</p>
+      <h1 class="title">Plain tags, searchable, deletable</h1>
+      <p class="lede">Colour stays on <b>projects</b> only; tags are <b>plain text</b> — no confetti. The picker is <b>searchable</b> because you'll have a lot of them (characters, scenes, papers, not just <span style="white-space:nowrap">bug/review</span>), and you can <b>rename or delete</b> any tag, not just make more. Starter set: bug · review · design · release, then your own.</p>
+    </header>
+
+    <div class="sbwin teal">
+      <div class="titlebar">
+        <span class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+        <span class="tb-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</span>
+        <span class="tb-title">Fabled</span>
+      </div>
+
+      <div class="sbbody">
+        <div class="sb">
+          <div class="sb-top">
+            <div class="sb-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search sessions</div>
+            <div class="tfilter">
+              <span class="tfchip on">All</span>
+              <span class="tfchip">design</span>
+              <span class="tfchip">chapter 3</span>
+              <span class="tfchip">protagonist</span>
+              <span class="tfchip">bug</span>
+              <span class="tfchip add">＋</span>
+            </div>
+          </div>
+
+          <div class="sb-scroll">
+            <div class="grp-hd">Today · Fabled</div>
+            <div class="srow sel">
+              <div class="st">CLI handshake fixes <span class="rt">2h</span></div>
+              <div class="tags">
+                <span class="tg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12l-8 8-9-9V3h8z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor"/></svg>bug</span>
+                <span class="tg">review</span>
+              </div>
+            </div>
+            <div class="srow">
+              <div class="st">Fabled design sprint <span class="rt">3m</span></div>
+              <div class="tags"><span class="tg">design</span></div>
+            </div>
+
+            <div class="grp-hd">Today · Novel</div>
+            <div class="srow">
+              <div class="st">Chapter 3 rewrite <span class="rt">5h</span></div>
+              <div class="tags"><span class="tg">chapter 3</span><span class="tg">protagonist</span><span class="tg">scene</span></div>
+            </div>
+            <div class="srow">
+              <div class="st">Character voice pass <span class="rt">1d</span></div>
+              <div class="tags"><span class="tg">protagonist</span></div>
+            </div>
+
+            <div class="grp-hd">Yesterday · Thesis</div>
+            <div class="srow">
+              <div class="st">Methods section draft <span class="rt">1d</span></div>
+              <div class="tags"><span class="tg">methods</span><span class="tg">lit-review</span></div>
+            </div>
+          </div>
+
+          <!-- tag popover, searchable + plain -->
+          <div class="tagpop">
+            <div class="tp-hd"><span class="h">Tags · Chapter 3 rewrite</span><span class="edit">Edit</span></div>
+            <div class="tp-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Filter tags…</div>
+            <div class="tp-list">
+              <div class="tp-item on"><span class="tp-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>chapter 3<span class="cnt">4</span></div>
+              <div class="tp-item on"><span class="tp-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>protagonist<span class="cnt">9</span></div>
+              <div class="tp-item on"><span class="tp-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>scene<span class="cnt">12</span></div>
+              <div class="tp-item"><span class="tp-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>antagonist<span class="cnt">3</span></div>
+              <div class="tp-item"><span class="tp-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>design<span class="cnt">6</span></div>
+            </div>
+            <div class="tp-div"></div>
+            <div class="tp-new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New tag “act 2”…</div>
+          </div>
+        </div>
+
+        <div class="main-faint">
+          <div class="mf-inner">
+            <p class="mf-h">Chapter 3 rewrite <span class="tg">scene</span></p>
+            <p class="mf-p">Its tags sit by the title in the session too — click them to add or remove without going back to the sidebar.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="sec-label">Renaming &amp; deleting — “Edit” flips the picker to this</p>
+    <div class="managewrap">
+      <div class="manage teal">
+        <div class="mg-hd"><span class="h">Manage tags</span><span class="done">Done</span></div>
+        <div class="mg-body">
+          <div class="mg-row editing"><span class="nm">protagonist<span class="mg-caret"></span></span><span class="cnt">9</span><svg class="ico del" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></div>
+          <div class="mg-row"><span class="nm">scene</span><span class="cnt">12</span><svg class="ico ren" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg><svg class="ico del" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></div>
+          <div class="mg-row"><span class="nm">chapter 3</span><span class="cnt">4</span><svg class="ico ren" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg><svg class="ico del" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></div>
+          <div class="mg-row"><span class="nm">design</span><span class="cnt">6</span><svg class="ico ren" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg><svg class="ico del" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></div>
+        </div>
+      </div>
+      <div class="mg-txt">
+        <h4>Get rid of them, too</h4>
+        <p>Hit <b>Edit</b> in the tag picker and it flips to <b>Manage</b>: <b>rename</b> a tag (the count tells you how many sessions it touches) or <b>delete</b> it with the trash. Deleting a tag just removes it everywhere — the sessions stay.</p>
+        <p>Because a novel or a thesis can sprout dozens of tags, this is where you prune. The picker's <b>search box</b> keeps the everyday list short even when the full set is long.</p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="ncard"><p class="ni">Plain, not painted</p><p>Tag chips are just text. <b>Projects</b> keep the one subtle colour cue; tags stay quiet so a busy row still reads.</p></div>
+      <div class="ncard"><p class="ni">Built for many</p><p>Searchable picker + counts. Works the same for four dev tags or forty scene tags.</p></div>
+      <div class="ncard"><p class="ni">Yours to shape</p><p>Starter set to begin, then create, rename, and delete freely. Right-click a session, or tag a whole selection at once.</p></div>
+    </div>
+
+    <div class="qs">
+      <h3>Last couple of tag calls</h3>
+      <ol>
+        <li><b>Filter with two tags</b> — <b>either</b> (scene OR protagonist) or <b>both</b> (scene AND protagonist)? For your creative work, which is more useful?</li>
+        <li><b>Delete confirmation</b> — a tag used on 12 sessions: delete instantly (undoable), or ask "remove from 12 sessions?" first?</li>
+        <li>Anything missing before I call tags done — this feels like the whole feature to me.</li>
+      </ol>
+    </div>
+  </div>
+</div>

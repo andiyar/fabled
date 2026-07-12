@@ -1,0 +1,220 @@
+<title>Fabled — sidebar, two-level</title>
+<style>
+  :root{
+    --wall:#ECEEEC; --wall-panel:#F4F6F4; --wall-ink:#1C2422; --wall-muted:#5f6a67; --wall-faint:#8b9793; --wall-line:#d9e0dd; --wall-accent:#9C6F32;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+    --serif:ui-serif,"New York",Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--wall:#0A1315; --wall-panel:#10201F; --wall-ink:#E7EBE7; --wall-muted:#92a09a; --wall-faint:#5f716a; --wall-line:rgba(130,165,155,.16); --wall-accent:#CFA669}}
+  :root[data-theme="light"]{--wall:#ECEEEC; --wall-panel:#F4F6F4; --wall-ink:#1C2422; --wall-muted:#5f6a67; --wall-faint:#8b9793; --wall-line:#d9e0dd; --wall-accent:#9C6F32}
+  :root[data-theme="dark"]{--wall:#0A1315; --wall-panel:#10201F; --wall-ink:#E7EBE7; --wall-muted:#92a09a; --wall-faint:#5f716a; --wall-line:rgba(130,165,155,.16); --wall-accent:#CFA669}
+
+  *{box-sizing:border-box} body{margin:0}
+  .board{background:var(--wall); color:var(--wall-ink); font-family:var(--sans); padding:44px 24px 80px; line-height:1.5; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px; margin:0 auto}
+  .eyebrow{font:600 11.5px/1 var(--sans); letter-spacing:.16em; text-transform:uppercase; color:var(--wall-accent); margin:0 0 14px}
+  h1.title{font-family:var(--serif); font-weight:600; font-size:clamp(30px,5vw,44px); letter-spacing:-.01em; margin:0 0 14px; text-wrap:balance}
+  .lede{font-size:16px; color:var(--wall-muted); max-width:70ch; margin:0}
+  .lede b{color:var(--wall-ink); font-weight:600}
+  .sec-label{font:600 12px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase; color:var(--wall-faint); margin:34px 0 16px}
+
+  .teal{--g:#0C1618; --side:#0A1315; --panel:#122120; --panel2:#0F1C1D; --ink:#E9EEEA; --muted:#8EA29A; --faint:#5C6F68; --line:rgba(120,160,150,.15); --accent:#CFA669; --accent-2:#D8AE6D; --glow:#5AC9B4; --amber:#E0B15C}
+  .sbwin{border-radius:12px; overflow:hidden; border:1px solid #1d2e2d; box-shadow:0 30px 70px -28px rgba(6,14,16,.7); background:var(--g); color:var(--ink); font-size:13px; display:grid; grid-template-rows:auto 1fr}
+  .titlebar{display:flex; align-items:center; gap:12px; padding:0 14px; height:46px; background:var(--side); border-bottom:1px solid var(--line)}
+  .lights{display:flex; gap:8px} .lights i{width:12px;height:12px;border-radius:50%;display:block}
+  .lights .r{background:#ED6A5E} .lights .y{background:#F4BF4F} .lights .g{background:#61C554}
+  .tb-home{display:inline-flex; align-items:center; gap:6px; font-weight:600; color:var(--ink); padding:5px 9px; border-radius:7px; background:var(--panel); box-shadow:inset 0 0 0 1px var(--line); font-size:12px}
+  .tb-home svg{width:13px;height:13px}
+  .tb-title{font-family:var(--serif); font-weight:600; font-size:14px; margin-left:2px}
+
+  .sbbody{display:grid; grid-template-columns:300px 1fr; min-height:660px}
+  @media (max-width:720px){.sbbody{grid-template-columns:1fr}}
+
+  .sb{background:var(--side); border-right:1px solid var(--line); display:flex; flex-direction:column; min-width:0}
+  .sb-top{position:relative; padding:12px 11px 10px; border-bottom:1px solid var(--line)}
+  .sb-search{display:flex; align-items:center; gap:7px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:7px 9px; color:var(--faint); font-size:12.5px; margin-bottom:9px}
+  .sb-search svg{width:13px;height:13px;opacity:.7}
+  .sb-tools{display:flex; align-items:center; gap:8px}
+  .funnelbtn{display:inline-flex; align-items:center; gap:6px; font:600 12px/1 var(--sans); color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 9px}
+  .funnelbtn svg{width:13px;height:13px; color:var(--accent)}
+  .funnelbtn .car{opacity:.5; font-size:10px}
+  .selbtn{margin-left:auto; font:600 12px/1 var(--sans); color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:6px 9px}
+
+  .funnelpop{position:absolute; top:76px; left:11px; width:224px; z-index:5; background:#132322; border:1px solid rgba(130,165,155,.25); border-radius:10px; box-shadow:0 18px 40px -16px rgba(0,0,0,.7); padding:8px}
+  .fp-lbl{font:600 10px/1 var(--sans); letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin:8px 8px 6px}
+  .fp-item{display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px; font-size:12.5px; color:var(--ink)}
+  .fp-item .ck{width:13px;height:13px;color:var(--accent);opacity:0; flex:none}
+  .fp-item.on .ck{opacity:1} .fp-item.on{background:var(--panel)}
+  .fp-item.dim{color:var(--faint)}
+  .fp-div{height:1px; background:var(--line); margin:6px 4px}
+
+  .sb-scroll{padding:10px 9px 14px; overflow:hidden; flex:1}
+  .sec-hd{display:flex; align-items:center; gap:7px; font:600 10.5px/1 var(--sans); letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin:12px 6px 8px}
+  .sec-hd:first-child{margin-top:2px}
+  .sec-hd.attn{color:var(--amber)} .sec-hd.attn .cn{color:var(--amber)}
+  .sec-hd .cn{color:var(--accent)}
+
+  .arow{border-left:2px solid var(--amber); background:rgba(224,177,92,.08); border-radius:0 9px 9px 0; padding:9px 11px; margin-bottom:6px}
+  .arow .at{font-weight:600; font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .arow .ap{font-size:11.5px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .arow .am{font-size:10.5px; color:var(--faint); margin-top:4px}
+  .arow.review{border-left-color:#7FB0D0; background:rgba(127,176,208,.08)}
+  .wrow{display:flex; align-items:center; gap:9px; padding:8px 11px; border-radius:8px; background:rgba(90,201,180,.06); border:1px solid rgba(90,201,180,.2); margin-bottom:6px}
+  .wdot{width:8px;height:8px;border-radius:50%;background:var(--glow); animation:pulse 1.4s ease-in-out infinite; flex:none}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+  .wrow .wt{font-weight:600; font-size:12.5px; color:var(--ink)}
+  .wrow .ws{font-size:11px; color:var(--glow); margin-top:1px}
+
+  /* two-level grouping */
+  .pgrp{display:flex; align-items:center; gap:8px; margin:14px 6px 6px; padding-top:13px; border-top:1px solid var(--line); font:600 11.5px/1 var(--sans); letter-spacing:.06em; text-transform:uppercase; color:var(--ink)}
+  .pgrp .pcount{color:var(--faint); font-weight:600}
+  .sgrp{display:flex; align-items:center; gap:6px; margin:9px 6px 4px 8px; font:600 10px/1 var(--sans); letter-spacing:.07em; text-transform:uppercase; color:var(--faint)}
+  .sgrp .pd{width:6px;height:6px;border-radius:2px; flex:none}
+  .prow{display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:8px; margin-left:8px}
+  .prow:hover{background:var(--panel2)}
+  .prow.sel{background:var(--panel); box-shadow:inset 0 0 0 1px var(--line)}
+  .prow .pin{width:12px;height:12px;color:var(--accent);flex:none}
+  .prow .col{min-width:0; flex:1}
+  .prow .pt{font-weight:500; font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .prow .rt{font-size:11px; color:var(--faint); flex:none}
+  .sb-more{font-size:12px; color:var(--faint); padding:10px 8px 2px 10px}
+
+  .main-faint{background:var(--g); position:relative; overflow:hidden}
+  .main-faint::after{content:""; position:absolute; inset:0; background:linear-gradient(90deg, rgba(12,22,24,0), rgba(12,22,24,.72) 62%, rgba(12,22,24,.93))}
+  .mf-inner{padding:30px 34px; opacity:.5}
+  .mf-h{font-family:var(--serif); font-size:22px; color:var(--ink); margin:0 0 16px}
+  .mf-p{font-size:13px; color:var(--muted); max-width:44ch; line-height:1.6; margin:0 0 12px}
+  .mf-pill{display:inline-block; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:9px 12px; font-size:12px; color:var(--muted); margin-bottom:8px}
+
+  /* multi-select concept */
+  .ms{display:grid; grid-template-columns:270px 1fr; gap:22px; align-items:center; margin-top:6px}
+  @media (max-width:720px){.ms{grid-template-columns:1fr}}
+  .mscard{border-radius:12px; overflow:hidden; border:1px solid #1d2e2d; background:var(--side); position:relative}
+  .mshd{font:600 10px/1 var(--sans); letter-spacing:.09em; text-transform:uppercase; color:var(--faint); padding:11px 12px 4px}
+  .msrow{display:flex; align-items:center; gap:9px; padding:8px 12px; font-size:12.5px; color:var(--ink)}
+  .msbox{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--faint); flex:none; display:inline-flex; align-items:center; justify-content:center}
+  .msrow.on{background:rgba(207,166,105,.10)}
+  .msrow.on .msbox{background:var(--accent); border-color:var(--accent)}
+  .msbox svg{width:11px;height:11px;color:#0C1618; opacity:0}
+  .msrow.on .msbox svg{opacity:1}
+  .msrow .rt{margin-left:auto; font-size:11px; color:var(--faint)}
+  .msbar{display:flex; align-items:center; gap:6px; padding:10px 12px; border-top:1px solid var(--line); background:var(--panel2)}
+  .msbar .cnt{font-weight:600; font-size:12px; color:var(--accent)}
+  .msact{font:600 11.5px/1 var(--sans); color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:6px 9px}
+  .ms .txt h4{font-family:var(--serif); font-size:18px; font-weight:600; margin:0 0 8px}
+  .ms .txt p{font-size:13.5px; color:var(--wall-muted); margin:0 0 8px} .ms .txt p b{color:var(--wall-ink); font-weight:600}
+
+  .qs{margin-top:26px; background:var(--wall-panel); border:1px solid var(--wall-line); border-radius:12px; padding:18px 20px}
+  .qs h3{font-family:var(--serif); font-size:18px; font-weight:600; margin:0 0 12px}
+  .qs ol{margin:0; padding-left:20px}
+  .qs li{font-size:13.5px; color:var(--wall-muted); margin-bottom:9px} .qs li b{color:var(--wall-ink); font-weight:600}
+</style>
+
+<div class="board">
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Design · round 8 · sidebar power</p>
+      <h1 class="title">Group by Date, <span style="color:var(--wall-accent)">then</span> by Project</h1>
+      <p class="lede">Active sessions float, pins stay — both in. The new thing is <b>two-level grouping</b>: a primary axis and a sub-axis. Here it's <b>Date › Project</b> — each day broken down by the projects you touched that day. The funnel drives both levels. Multi-select is roughed in below — you raised it, so let's look.</p>
+    </header>
+
+    <div class="sbwin teal">
+      <div class="titlebar">
+        <span class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+        <span class="tb-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Home</span>
+        <span class="tb-title">Fabled</span>
+      </div>
+
+      <div class="sbbody">
+        <div class="sb">
+          <div class="sb-top">
+            <div class="sb-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search sessions</div>
+            <div class="sb-tools">
+              <span class="funnelbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>Date › Project <span class="car">▾</span></span>
+              <span class="selbtn">Select</span>
+            </div>
+            <div class="funnelpop">
+              <p class="fp-lbl">Group by</p>
+              <div class="fp-item on"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Date</div>
+              <div class="fp-item"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Project</div>
+              <div class="fp-item"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>State</div>
+              <div class="fp-div"></div>
+              <p class="fp-lbl">Then by</p>
+              <div class="fp-item on"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Project</div>
+              <div class="fp-item dim"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Date <span style="font-size:10px;opacity:.7">(primary)</span></div>
+              <div class="fp-item"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>None</div>
+              <div class="fp-div"></div>
+              <p class="fp-lbl">Sort within</p>
+              <div class="fp-item on"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Recent activity</div>
+              <div class="fp-item"><svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>A–Z</div>
+            </div>
+          </div>
+
+          <div class="sb-scroll">
+            <div class="sec-hd attn">Needs you <span class="cn">2</span></div>
+            <div class="arow"><div class="at">Fabled continuation</div><div class="ap">“Design first, or fix the annoyances?”</div><div class="am">Fabled · 3m</div></div>
+            <div class="arow review"><div class="at">Plan 3 execution</div><div class="ap">291 tests pass — ready to merge.</div><div class="am">Fabled · 11m</div></div>
+
+            <div class="sec-hd">Working <span class="cn">1</span></div>
+            <div class="wrow"><span class="wdot"></span><div><div class="wt">iOS redesign Phase 2</div><div class="ws">running · swift build</div></div></div>
+
+            <!-- primary: Today -->
+            <div class="pgrp">Today <span class="pcount">4</span></div>
+              <div class="sgrp"><span class="pd" style="background:#CFA669"></span>Fabled</div>
+                <div class="prow sel"><svg class="pin" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M14 2l-1 7 4 3-5 1v9l-2-9-5-1 4-3-1-7z"/></svg><div class="col"><div class="pt">CLI handshake fixes</div></div><span class="rt">2h</span></div>
+                <div class="prow"><span style="width:12px"></span><div class="col"><div class="pt">ClaudeKit engine completion</div></div><span class="rt">4h</span></div>
+              <div class="sgrp"><span class="pd" style="background:#7FB0D0"></span>LifeSync</div>
+                <div class="prow"><span style="width:12px"></span><div class="col"><div class="pt">Week timed grid</div></div><span class="rt">5h</span></div>
+
+            <!-- primary: Yesterday -->
+            <div class="pgrp">Yesterday <span class="pcount">3</span></div>
+              <div class="sgrp"><span class="pd" style="background:#CFA669"></span>Fabled</div>
+                <div class="prow"><span style="width:12px"></span><div class="col"><div class="pt">Fabled project setup</div></div><span class="rt">1d</span></div>
+              <div class="sgrp"><span class="pd" style="background:#5AC9B4"></span>vault</div>
+                <div class="prow"><span style="width:12px"></span><div class="col"><div class="pt">Review multi-stage document workflow</div></div><span class="rt">1d</span></div>
+                <div class="prow"><span style="width:12px"></span><div class="col"><div class="pt">Audit vault content quality</div></div><span class="rt">1d</span></div>
+
+            <div class="sb-more">Earlier this week — 25 more, or search</div>
+          </div>
+        </div>
+
+        <div class="main-faint">
+          <div class="mf-inner">
+            <p class="mf-h">CLI handshake fixes</p>
+            <p class="mf-p">The selected session's conversation shows here — dimmed so the sidebar's the focus.</p>
+            <span class="mf-pill">Read 4 files ›</span><br>
+            <span class="mf-pill">Ran 3 commands ▾</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="sec-label">Multi-select — a first swing</p>
+    <div class="ms">
+      <div class="mscard teal">
+        <p class="mshd">⌘-click or Shift-click to select</p>
+        <div class="msrow on"><span class="msbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Fabled project setup<span class="rt">1d</span></div>
+        <div class="msrow on"><span class="msbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>ClaudeKit engine completion<span class="rt">4h</span></div>
+        <div class="msrow"><span class="msbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Week timed grid<span class="rt">5h</span></div>
+        <div class="msbar"><span class="cnt">2 selected</span><span class="msact">Pin</span><span class="msact">Tag…</span><span class="msact">Archive</span><span class="msact">⋯</span></div>
+      </div>
+      <div class="txt">
+        <h4>Select many, act once</h4>
+        <p>Hit <b>Select</b> (top-right) or ⌘-click rows — checkboxes appear, and an <b>action bar</b> slides in: <b>Pin</b>, <b>Tag…</b>, <b>Archive</b>, more under ⋯.</p>
+        <p>This is also where <b>tags</b> plug in — select a handful, tag them all at once. That's the natural bridge to the next screen we design.</p>
+        <p>It's a rough first pass — tell me if you want it, and which bulk actions actually matter to you.</p>
+      </div>
+    </div>
+
+    <div class="qs">
+      <h3>Your calls</h3>
+      <ol>
+        <li><b>Two-level grouping</b> — Date › Project as shown. Is that the default you want (matches your CD habit + your projects), and does the nested look read cleanly or feel too indented?</li>
+        <li><b>Sub-axis freedom</b> — should <i>any</i> pair be allowed (Project › Date, State › Project…), or just a couple of sensible presets?</li>
+        <li><b>Multi-select</b> — worth building? If yes, which bulk actions: Pin, Tag, Archive, Delete, Export — what's your actual list?</li>
+        <li><b>Project colour dots</b> — I gave each project a small colour chip (bronze/blue/teal) so sub-groups are scannable. Useful, or noise?</li>
+      </ol>
+    </div>
+  </div>
+</div>

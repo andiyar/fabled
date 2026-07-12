@@ -1,0 +1,138 @@
+<title>Fabled — the halfway light</title>
+<style>
+  :root{
+    --wall:#ECEEEC; --wall-panel:#F4F6F4; --wall-ink:#1C2422; --wall-muted:#606a67; --wall-faint:#8b9793; --wall-line:#d9e0dd; --wall-accent:#A9703B;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+    --serif:ui-serif,"New York",Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--wall:#0C1517; --wall-panel:#12201F; --wall-ink:#E7EBE7; --wall-muted:#93a09a; --wall-faint:#5f716a; --wall-line:rgba(130,165,155,.16); --wall-accent:#CFA669}}
+  :root[data-theme="light"]{--wall:#ECEEEC; --wall-panel:#F4F6F4; --wall-ink:#1C2422; --wall-muted:#606a67; --wall-faint:#8b9793; --wall-line:#d9e0dd; --wall-accent:#A9703B}
+  :root[data-theme="dark"]{--wall:#0C1517; --wall-panel:#12201F; --wall-ink:#E7EBE7; --wall-muted:#93a09a; --wall-faint:#5f716a; --wall-line:rgba(130,165,155,.16); --wall-accent:#CFA669}
+
+  *{box-sizing:border-box} body{margin:0}
+  .board{background:var(--wall); color:var(--wall-ink); font-family:var(--sans); padding:44px 24px 80px; line-height:1.5; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px; margin:0 auto}
+  .eyebrow{font:600 11.5px/1 var(--sans); letter-spacing:.16em; text-transform:uppercase; color:var(--wall-accent); margin:0 0 14px}
+  h1.title{font-family:var(--serif); font-weight:600; font-size:clamp(30px,5vw,46px); letter-spacing:-.01em; margin:0 0 14px; text-wrap:balance}
+  .lede{font-size:16px; color:var(--wall-muted); max-width:66ch; margin:0}
+  .lede b{color:var(--wall-ink); font-weight:600}
+  .rule{height:1px; background:var(--wall-line); border:0; margin:34px 0}
+  .sec-label{font:600 12px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase; color:var(--wall-faint); margin:0 0 8px}
+  .sec-note{font-size:14px; color:var(--wall-muted); margin:0 0 26px; max-width:66ch}
+  .sec-note b{color:var(--wall-ink); font-weight:600}
+
+  .lockbar{border-radius:14px; overflow:hidden; border:1px solid #1d2e2d; background:#0C1618; display:flex; align-items:center; gap:16px; padding:16px 20px}
+  .lockbar .lw{font-family:var(--serif); font-size:22px; font-weight:600; color:#D8AE6D}
+  .lockbar .lmeta{color:#8EA29A; font-size:13px}
+  .lockbar .lmeta b{color:#E9EEEA; font-weight:600}
+  .lockbar .swatches{display:flex; gap:6px; margin-left:auto}
+  .lockbar .sw{width:26px;height:26px;border-radius:7px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  .lockbar .tag{font:600 11px/1 var(--sans); letter-spacing:.08em; text-transform:uppercase; color:#0C1618; background:#5AC9B4; padding:6px 9px; border-radius:999px}
+
+  .ltgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  @media (max-width:820px){.ltgrid{grid-template-columns:1fr}}
+  .lt{--accent:#A9703B; --amber:#B2751C; --amberbg:rgba(178,117,28,.14); --slate:#4E6E8C; --slatebg:rgba(78,110,140,.15);
+     border-radius:14px; padding:20px 20px 18px; background:var(--g); border:1px solid var(--line); color:var(--ink); position:relative}
+  .lt-bone{--g:#F5F3ED; --side:#ECEAE1; --panel:#FFFFFF; --panel2:#F7F5EE; --ink:#242019; --muted:#726B5D; --faint:#A69E8D; --line:#E7E3D7}
+  .lt-linen{--g:#F5F4EF; --side:#EBEAE3; --panel:#FFFFFF; --panel2:#F6F6F0; --ink:#23211C; --muted:#6F6B61; --faint:#A39F93; --line:#E6E4DB}
+  .lt-paper{--g:#F4F4F1; --side:#EAEAE5; --panel:#FFFFFF; --panel2:#F6F6F2; --ink:#232320; --muted:#6C6B65; --faint:#A0A099; --line:#E6E5DF}
+  .lt.pick{box-shadow:0 0 0 2px var(--accent), 0 16px 34px -18px rgba(90,60,20,.45)}
+  .lt .pin{position:absolute; top:-10px; left:18px; font:600 9.5px/1 var(--sans); letter-spacing:.09em; text-transform:uppercase; color:#fff; background:var(--accent); padding:5px 8px; border-radius:999px}
+  .lt .greet{font-size:11.5px; color:var(--muted); margin:0 0 2px}
+  .lt .word{font-family:var(--serif); font-size:22px; font-weight:600; color:var(--accent); margin:0 0 15px}
+  .lt .c{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; display:flex; gap:9px; align-items:flex-start; margin-bottom:8px}
+  .lt .chip{flex:none; font:600 10.5px/1 var(--sans); padding:5px 8px; border-radius:999px; display:inline-flex; align-items:center; gap:5px; margin-top:1px}
+  .lt .chip i{width:6px;height:6px;border-radius:50%;display:block}
+  .lt .need{color:var(--amber); background:var(--amberbg)} .lt .need i{background:var(--amber)}
+  .lt .rev{color:var(--slate); background:var(--slatebg)} .lt .rev i{background:var(--slate)}
+  .lt .ct{font-weight:600; font-size:13px; margin:0 0 2px; color:var(--ink)}
+  .lt .cp{font-size:12px; color:var(--muted); margin:0}
+  .lt .comp{background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:10px 11px 8px; margin-top:12px}
+  .lt .ph{font-size:12px; color:var(--faint); margin:0 0 9px}
+  .lt .chips{display:flex; gap:6px; align-items:center}
+  .lt .cc{font:500 11px/1 var(--sans); color:var(--ink); background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:5px 7px}
+  .lt .cc.k{color:var(--accent)}
+  .lt .send{margin-left:auto; width:25px;height:25px;border-radius:50%; background:var(--accent); color:#fff; display:inline-flex;align-items:center;justify-content:center}
+  .lt .send svg{width:12px;height:12px}
+  .lt .name{font-family:var(--serif); font-size:16px; font-weight:600; margin:15px 0 2px; color:var(--ink)}
+  .lt .desc{font-size:12px; color:var(--muted); margin:0}
+
+  .swref{display:flex; align-items:center; gap:10px; margin-top:22px; font-size:12.5px; color:var(--wall-muted); flex-wrap:wrap}
+  .swref .s{width:20px;height:20px;border-radius:6px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1); display:inline-block; vertical-align:middle; margin-right:5px}
+  .swref b{color:var(--wall-ink); font-weight:600}
+
+  .foot{margin-top:24px; font-size:13.5px; color:var(--wall-muted); max-width:72ch}
+  .foot b{color:var(--wall-ink); font-weight:600}
+</style>
+
+<div class="board">
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Design · round 5 · the halfway</p>
+      <h1 class="title">Linen — right between Paper and Bone</h1>
+      <p class="lede">Here's the midpoint you asked for, sitting literally in the middle: <b>Bone</b> (left, warmest), <b>Linen</b> (the new halfway), <b>Paper</b> (right, neutral). Scan them left to right — if Linen's the spot, that's the last colour decision and the whole palette locks.</p>
+    </header>
+
+    <hr class="rule">
+    <p class="sec-label">Dark mode · locked</p>
+    <div class="lockbar">
+      <span class="lw">Fabled</span>
+      <span class="lmeta"><b>Teal Midnight</b> — the icon's own ground, bronze + code-glow</span>
+      <span class="swatches">
+        <span class="sw" style="background:#0C1618"></span>
+        <span class="sw" style="background:#122120"></span>
+        <span class="sw" style="background:#CFA669"></span>
+        <span class="sw" style="background:#5AC9B4"></span>
+      </span>
+      <span class="tag">Locked ✓</span>
+    </div>
+
+    <hr class="rule">
+    <p class="sec-label">Light mode · warm → neutral</p>
+    <p class="sec-note">Same bronze, same layout — only the paper's warmth changes across the three.</p>
+
+    <div class="ltgrid">
+
+      <div class="lt lt-bone">
+        <p class="greet">Welcome back, Ben</p>
+        <p class="word">Fabled</p>
+        <div class="c"><span class="chip need"><i></i>Needs you</span><div><p class="ct">Fabled continuation</p><p class="cp">Design or annoyances first?</p></div></div>
+        <div class="c"><span class="chip rev"><i></i>Review</span><div><p class="ct">Plan 3 execution</p><p class="cp">291 tests pass.</p></div></div>
+        <div class="comp"><p class="ph">Start something new…</p><div class="chips"><span class="cc k">Opus 4.8</span><span class="cc">High</span><span class="cc">Auto</span><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span></div></div>
+        <p class="name">Bone</p>
+        <p class="desc">Warmest of the three.</p>
+      </div>
+
+      <div class="lt lt-linen pick">
+        <span class="pin">The halfway</span>
+        <p class="greet">Welcome back, Ben</p>
+        <p class="word">Fabled</p>
+        <div class="c"><span class="chip need"><i></i>Needs you</span><div><p class="ct">Fabled continuation</p><p class="cp">Design or annoyances first?</p></div></div>
+        <div class="c"><span class="chip rev"><i></i>Review</span><div><p class="ct">Plan 3 execution</p><p class="cp">291 tests pass.</p></div></div>
+        <div class="comp"><p class="ph">Start something new…</p><div class="chips"><span class="cc k">Opus 4.8</span><span class="cc">High</span><span class="cc">Auto</span><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span></div></div>
+        <p class="name">Linen</p>
+        <p class="desc">Halfway — a soft warmth you'd feel, not name.</p>
+      </div>
+
+      <div class="lt lt-paper">
+        <p class="greet">Welcome back, Ben</p>
+        <p class="word">Fabled</p>
+        <div class="c"><span class="chip need"><i></i>Needs you</span><div><p class="ct">Fabled continuation</p><p class="cp">Design or annoyances first?</p></div></div>
+        <div class="c"><span class="chip rev"><i></i>Review</span><div><p class="ct">Plan 3 execution</p><p class="cp">291 tests pass.</p></div></div>
+        <div class="comp"><p class="ph">Start something new…</p><div class="chips"><span class="cc k">Opus 4.8</span><span class="cc">High</span><span class="cc">Auto</span><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span></div></div>
+        <p class="name">Paper</p>
+        <p class="desc">Dead neutral.</p>
+      </div>
+
+    </div>
+
+    <div class="swref">
+      <span><span class="s" style="background:#F5F3ED"></span><b>Bone</b> #F5F3ED</span>
+      <span><span class="s" style="background:#F5F4EF"></span><b>Linen</b> #F5F4EF</span>
+      <span><span class="s" style="background:#F4F4F1"></span><b>Paper</b> #F4F4F1</span>
+    </div>
+
+    <p class="foot">If <b>Linen</b> lands, the palette's fully locked — Teal Midnight dark, Linen light, bronze throughout. Then I'm done with swatches and I take the skin to the conversation view. If it's still a touch off, tell me which way and I'll slide it.</p>
+  </div>
+</div>

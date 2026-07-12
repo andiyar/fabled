@@ -97,6 +97,26 @@ Rows **11, 19, 21** are no longer "verify at the gate" — Ben verified and it *
 
 **Status flips:** rows 7, 11, 19, 21 → ❌ OPEN (were IN FLIGHT / gate-pending). Rows 9 (effort), state-identity → effectively ✅ pending formal close. Rows 16, 17 → reinforced/pulled-forward. New rows 22–25 → ❌ OPEN.
 
+## Design sprint — decisions (2026-07-12, session e1cf0e99)
+
+Row 19's mockup-driven design phase, **executed with Ben** (HTML mockups he reacted to, ~6 rounds; DECISIONS "Fabled design language locked WITH Ben"). New status: 🎨 **DESIGN-DECIDED** = look/interaction settled with Ben in mockup; still ❌ until built and Ben verifies in a build (rule 4 stands — mockup approval is not build approval).
+
+Locked: mode-aware palette (dark **Teal Midnight** / light **Linen** — the warm-neutral halfway; bronze is the organising accent, teal rejected as the light ground, cream as too warm), New York serif wordmark + SF UI, home = attention inbox + bottom composer with model/effort/**Auto** chips + persistent Home + type-to-resume, conversation = collapsed step-group summaries + inspector-defaults-to-Activity-task-list (drill in / Back out) + composer-grows-as-you-type + git footer strip.
+
+Rows now 🎨 design-decided (build in 4c, then gate): **6** (sidebar sorting → two-level Date › Project grouping via the funnel), **13** (tags → plain text chips, searchable picker, rename/delete, AND-filter — the cut row, back in), **7** (legible "waiting on you" inbox), **11** (font → New York serif — reopened row now answered in design), **16** (type-to-resume — composer is the front door), **17** (composer-adjacent model/permission chips), **18** (curated "Auto" mode chip), **19** (this sprint IS the phase), **21** (mac-assed: mode-aware materials, motion, git strip — foundation set), **22** (model/effort on the start composer), **23** (Home affordance returns to the inbox), **24** (useless badge replaced by word-labels + the Activity list), **25** (step grouping — visual settled; **build must still make grouping survive permission-gate interleaving**, the original root cause).
+
+New rows from the sprint:
+
+| # | Date | Comment | Notes |
+|---|------|---------|-------|
+| 26 | 07-12 | **Right panel = Activity / background-tasks list by default**, each row clickable in-and-out | Ben: "the tasks (background?) showed as a list of summaries… clickable in and out." Generalizes CD's background-tasks panel (digest §2c) + subagent drill-down (4a T11) into a session-wide activity ledger; live tasks pulse, finished ones drill to detail with Back. 🎨 design-decided |
+| 27 | 07-12 | **Composer grows as you type** (multi-line, ~8 lines then scrolls) — not a horizontal run-on | Ben asked directly whether it expands like CD. Yes. 🎨 design-decided |
+| 28 | 07-12 | **Git footer strip** — branch · session ±diff · time · cost · Create PR | Adopted from digest §2b (cd-14). Quiet transcript-footer at the bottom of the conversation view. 🎨 design-decided |
+| 29 | 07-12 | **Mode-aware appearance** — follows the system light/dark setting, no toggle | Direct answer to Ben "so it's mode aware?"; satisfies row 21's proper-dark-mode requirement. 🎨 design-decided |
+| 30 | 07-12 | **Two-level sidebar grouping** — primary axis + sub-axis (default **Date › Project**), funnel-driven | Ben: "primary sort by DATE but subsort by PROJECT." Any pair allowed. Attention/Working float above all grouping. 🎨 design-decided (extends row 6) |
+| 31 | 07-12 | **Multi-select scoped to tagging** — Pin/Archive are per-row (right-click); select-many exists only to Tag… several at once | Ben: general bulk actions "more effort than it's worth," but multi-select "makes sense for tagging." 🎨 design-decided |
+| 32 | 07-12 | **Ben's tag workload is creative/academic, not just dev** — characters, scenes, chapters, papers, lit-review | Tags must scale (searchable, counts, delete/rename); colour reserved for projects (tags plain). See memory [[ben-creative-phd-use]]. Shapes rows 13/30. |
+
 ---
 
 *Sources: full transcript sweep 2026-07-11 (`~/.claude/projects/-Users-andiyar-Developer-Fabled/*.jsonl`, sessions `975e1785`, `9f8443da`, `409fdeca`, `03f7002f`, `5a018155`, `2b161833`) + 4b gate 2026-07-12. Companion docs: FOLLOWUPS.md (tech riders), DECISIONS.md (scope calls), plans/2026-07-10-cd-ui-digest.md (screenshot distillation).*
