@@ -1,4 +1,5 @@
 import XCTest
+import Testing
 import ClaudeKit
 @testable import FabledCore
 
@@ -97,24 +98,77 @@ final class TimelineDisplayTests: XCTestCase {
         XCTAssertEqual(firstGroupID([tool("t1"), tool("t2"), tool("t3"), tool("t4")]), "t1")
     }
 
-    func testThinkingBreaksRun() {
+    func testThinkingIsAbsorbedIntoRun() {
         let thinking = TimelineItem.thinking(id: "th", text: "x", isStreaming: false)
-        // Without the thinking line, six tools collapse into ONE group; the
-        // thinking item between them must split the run into two groups.
+        // New row-25 contract: interior thinking no longer splits a run.
         let rows = TimelineDisplay.grouped(
             [tool("t1"), tool("t2"), tool("t3"), thinking,
              tool("t4"), tool("t5"), tool("t6")])
-        XCTAssertEqual(rows.count, 3, "thinking splits: group | thinking | group")
-        guard case .toolGroup(let firstID, _, _) = rows[0] else {
-            return XCTFail("expected leading group, got \(rows)")
+        XCTAssertEqual(rows.count, 1, "thinking is absorbed; the six tools stay one group")
+        guard case .toolGroup(let id, let items, let summary) = rows[0] else {
+            return XCTFail("expected one group, got \(rows)")
         }
-        XCTAssertEqual(firstID, "t1")
-        guard case .item(let mid) = rows[1], mid.id == "th" else {
-            return XCTFail("thinking must render alone, got \(rows)")
+        XCTAssertEqual(id, "t1")
+        XCTAssertEqual(items.filter { $0.toolCallID != nil }.count, 6)
+        XCTAssertEqual(summary, "Ran 6 commands")
+    }
+}
+
+struct TimelineDisplayGroupingTests {
+    private func tool(_ id: String, _ name: String) -> TimelineItem {
+        .toolCall(id: id, name: name, summary: name, input: .null,
+                  result: .string("ok"), isError: false, isRunning: false)
+    }
+    private func thinking(_ id: String) -> TimelineItem { .thinking(id: id, text: "…", isStreaming: false) }
+
+    // Build a PermissionRequest via the decoder (no memberwise init exists).
+    private func permission(_ id: String, _ resolution: PermissionDecision?) throws -> TimelineItem {
+        let json = #"{"type":"control_request","request_id":"\#(id)","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"echo hi"}}}"#
+        let event = try AgentEventDecoder.decode(Data(json.utf8))
+        guard case .controlRequest(let control) = event, let req = PermissionRequest(control) else {
+            fatalError("fixture shape drifted")
         }
-        guard case .toolGroup(let lastID, _, _) = rows[2] else {
-            return XCTFail("expected trailing group, got \(rows)")
+        return .permission(id: id, request: req, resolution: resolution)
+    }
+
+    @Test func thinkingBetweenToolsDoesNotBreakTheRun() {
+        let items = [thinking("t1"), tool("a","Read"), thinking("t2"),
+                     tool("b","Read"), thinking("t3"), tool("c","Read")]
+        let rows = TimelineDisplay.grouped(items)
+        #expect(rows.count == 1)                        // one group; interior + leading thinking absorbed
+        guard case .toolGroup(_, let grouped, let summary) = rows[0] else {
+            Issue.record("expected a group"); return
         }
-        XCTAssertEqual(lastID, "t4")
+        #expect(summary == "Read 3 files" || summary == "3 × Read")
+        #expect(grouped.filter { $0.toolCallID != nil }.count == 3)
+    }
+
+    @Test func trailingThinkingStaysOutsideTheGroup() {
+        let items = [tool("a","Bash"), tool("b","Bash"), tool("c","Bash"), thinking("t")]
+        let rows = TimelineDisplay.grouped(items)
+        #expect(rows.count == 2)                          // group, then loose thinking
+        if case .item(let last) = rows[1] { #expect(last.id == "t") }
+        else { Issue.record("thinking should be a loose item") }
+    }
+
+    @Test func assistantTextStillBreaksTheRun() {
+        let items = [tool("a","Read"), .assistantText(id: "x", markdown: "Now…", isStreaming: false),
+                     tool("b","Read"), tool("c","Read")]
+        let rows = TimelineDisplay.grouped(items)
+        #expect(!rows.contains { if case .toolGroup = $0 { return true } else { return false } })
+    }
+
+    @Test func resolvedAllowPermissionIsTransparentButDenyBreaks() throws {
+        // allow-gated run of 3 collapses (permission absorbed)
+        let allow = try [tool("a","Bash"), tool("b","Bash"),
+                         permission("p", .allowAsRequested), tool("c","Bash")]
+        let allowRows = TimelineDisplay.grouped(allow)
+        #expect(allowRows.filter { if case .toolGroup = $0 { return true } else { return false } }.count == 1)
+        // a deny between tools is a hard break → no group forms
+        let deny = try [tool("a","Bash"), tool("b","Bash"),
+                        permission("p", .deny(message: nil)), tool("c","Bash")]
+        let denyRows = TimelineDisplay.grouped(deny)
+        #expect(!denyRows.contains { if case .toolGroup = $0 { return true } else { return false } })
+        #expect(denyRows.contains { if case .item(let i) = $0, case .permission = i { return true } else { return false } })
     }
 }

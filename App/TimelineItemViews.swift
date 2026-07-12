@@ -220,6 +220,10 @@ struct ToolGroupRow: View {
     let isExpanded: Bool
     let toggle: () -> Void
 
+    /// Count only real tool calls — absorbed thinking/allow-gate rows (row 25)
+    /// live in `items` for the expanded view but must not inflate the badge.
+    private var toolCount: Int { items.filter { $0.toolCallID != nil }.count }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.spaceS) {
             HStack(spacing: 6) {
@@ -227,7 +231,7 @@ struct ToolGroupRow: View {
                     .font(.caption2).foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 Text(summary).fontWeight(.medium)
-                Text("\(items.count)")
+                Text("\(toolCount)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
@@ -242,7 +246,7 @@ struct ToolGroupRow: View {
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isButton)
             .accessibilityLabel("\(summary), \(isExpanded ? "expanded" : "collapsed")")
-            .help(isExpanded ? "Collapse this run" : "Expand \(items.count) steps")
+            .help(isExpanded ? "Collapse this run" : "Expand \(toolCount) steps")
             if isExpanded {
                 VStack(alignment: .leading, spacing: Theme.spaceS) {
                     // Grouped runs never contain Task/Agent rows (anchors are
