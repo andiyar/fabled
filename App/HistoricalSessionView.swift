@@ -9,6 +9,9 @@ struct HistoricalSessionView: View {
     @State private var inspectedID: String?
     @State private var isInspectorPresented = false
     @State private var expandedGroups: Set<String> = []
+    /// Type-to-resume draft (UX-LEDGER row 16): typing here and sending
+    /// reattaches this session instead of making Ben hunt for Continue.
+    @State private var draft = ""
     /// On-disk subagent sub-timelines keyed by parent Task tool_use id — the
     /// historical analog of ChatSession.subagentTimelines (4b Task 14).
     @State private var subagentTimelines: [String: [TimelineItem]] = [:]
@@ -92,6 +95,8 @@ struct HistoricalSessionView: View {
                 ProgressView("Loading transcript…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            Divider().overlay(Theme.hairline)
+            resumeComposer
         }
         .navigationTitle(summary.title)
         .navigationSubtitle(summary.project.displayName)
@@ -161,5 +166,52 @@ struct HistoricalSessionView: View {
             guard !Task.isCancelled, requested == summary.id else { return }
             subagentTimelines = subs
         }
+    }
+
+    // MARK: - Resume composer (UX-LEDGER row 16: type-to-resume)
+
+    /// Typing here and sending reattaches this session (the same Continue
+    /// path — one-process invariant) and delivers the message, so Ben can
+    /// just pick up the conversation instead of hunting for the Continue
+    /// button. Styling mirrors WelcomeView's start composer for consistency.
+    private var resumeComposer: some View {
+        VStack(alignment: .leading, spacing: Theme.spaceM) {
+            TextField("Message to pick up where you left off…", text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1...8)
+                .onSubmit(sendAndResume)
+            HStack(spacing: Theme.spaceS) {
+                ComposerChips()
+                Spacer(minLength: Theme.spaceS)
+                resumeSendButton
+            }
+        }
+        .padding(Theme.spaceM)
+        .background(Theme.surfaceSide)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var resumeSendButton: some View {
+        Button(action: sendAndResume) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.ground)
+                .frame(width: 30, height: 30)
+                .background(Theme.clay, in: RoundedRectangle(cornerRadius: 8))
+                .opacity(canSendResume ? 1 : 0.4)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSendResume)
+    }
+
+    private var canSendResume: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func sendAndResume() {
+        guard canSendResume else { return }
+        Task { await app.resumeAndSend(summary, text: draft); draft = "" }
     }
 }

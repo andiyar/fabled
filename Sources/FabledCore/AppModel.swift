@@ -299,6 +299,19 @@ public final class AppModel {
         await launch(configuration, seed: seed)
     }
 
+    /// Type-to-resume (UX-LEDGER row 16): the composer on a past session resumes
+    /// it (Continue = same id, one-process invariant) and delivers the first
+    /// message. Routes through `resume(_:fork:false)` — never a second process.
+    public func resumeAndSend(_ summary: SessionSummary, text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await resume(summary, fork: false)
+        if case .live(let id) = selection,
+           let session = liveSessions.first(where: { $0.id == id }) {
+            session.send(trimmed)
+        }
+    }
+
     /// Dismisses the launch-failure alert (RootView's binding calls this).
     public func clearLaunchError() {
         launchError = nil

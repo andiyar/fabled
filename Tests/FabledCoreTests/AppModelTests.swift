@@ -357,4 +357,34 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.selection)                  // Home is the inbox
         XCTAssertFalse(model.isPickingFolder)          // NOT the folder picker
     }
+
+    // MARK: - Type-to-resume (UX-LEDGER row 16)
+
+    @MainActor
+    func testResumeAndSendReattachesThenDelivers() async throws {
+        let (model, _) = try makeModel(defaults: freshDefaults())
+        let box = LaunchBox()
+        captureLaunch(model, into: box)
+        let summary = SessionSummary(
+            id: "sess-1",
+            project: ProjectFolder(flattenedName: "-tmp-demo",
+                                   originalPath: "/tmp/demo",
+                                   directoryURL: URL(fileURLWithPath: "/tmp/demo")),
+            fileURL: URL(fileURLWithPath: "/tmp/demo/sess-1.jsonl"),
+            title: "t", lastActivity: .now, approximateSizeBytes: 1)
+        await model.resumeAndSend(summary, text: "keep going")
+        // (1) it reattached the SAME id, no fork (one-process invariant)
+        XCTAssertEqual(box.configuration?.resumeSessionID, "sess-1")
+        XCTAssertEqual(box.configuration?.forkSession, false)
+        // (2) the message was actually delivered into the resumed live session
+        guard case .live(let id)? = model.selection,
+              let live = model.liveSessions.first(where: { $0.id == id }) else {
+            XCTFail("expected a live selection after resumeAndSend")
+            return
+        }
+        XCTAssertTrue(live.timeline.contains {
+            if case .userMessage(_, let text) = $0 { return text == "keep going" }
+            return false
+        }, "the first message is delivered to the resumed session")
+    }
 }
