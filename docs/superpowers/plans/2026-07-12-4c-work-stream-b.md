@@ -548,7 +548,20 @@ xcodegen generate && xcodebuild -project Fabled.xcodeproj -scheme Fabled build
 git add -A && git commit -m "feat(home): type-to-resume — composer on a past session resumes and sends (B1.5)"
 ```
 
-**B1 gate checkpoint (Ben):** launch → the inbox; open a session → Home button returns to it; the start composer has working model/effort/Auto chips; typing on a past session and hitting send picks it back up. Plain-English asks per memory `ben-plain-english`.
+### Task B1.6 — Dual-use / multi-folder sessions (`--add-dir`, row 33 — added post-lock, Ben 2026-07-12)
+
+**Scope add (Ben-signed):** DECISIONS "Dual-use / multi-folder sessions added to 4c" + UX-LEDGER row 33. A session takes a **primary** working folder + **additional** folders, passed to the CLI as `--add-dir` (verified on 2.1.206: `--add-dir <directories...>`, "additional directories to allow tool"). Serves Ben's creative/PhD dual-use (manuscript + notes; thesis + data).
+
+**Files:** `Sources/ClaudeKit/SessionConfiguration.swift` (`additionalDirectories: [URL] = []`), `Sources/ClaudeKit/AgentSession.swift` (emit one `--add-dir <path>` per extra dir — extend the same spawn-arg builder the permission hotfix threads `--permission-mode` through), `Sources/FabledCore/AppModel.swift` (`newSession` carries the extra dirs), `App/RootView.swift` (folder picker `allowsMultipleSelection: true`; first = primary cwd, rest = additional), the composer project chip (show `<primary> +N`). Test: `Tests/ClaudeKitTests/…`.
+
+- [ ] **Step 1 (TDD, ClaudeKit):** failing test — a `SessionConfiguration` whose `additionalDirectories = [a, b]` yields a spawn arg list containing `--add-dir <a>` and `--add-dir <b>` (assert against AgentSession's arg builder). Probe the real CLI once to confirm it accepts them.
+- [ ] **Step 2:** implement the config field + arg emission; thread `newSession(at:additionalDirectories:…)`.
+- [ ] **Step 3:** picker `allowsMultipleSelection: true`; composer project chip shows `<primary> +N` (list on expand).
+- [ ] **Step 4:** build + gate. **⚠️ Known wrinkle to disclose at the gate:** for v1 the extra dirs apply to sessions **started from the composer**; carrying them across **resume** is a follow-up (resume rebuilds config from the transcript, which doesn't record added dirs) — flag it, don't silently drop.
+
+**Order:** the ClaudeKit core (config + args, TDD) is independent — land it with/before B1.4; the picker + chip integrate after B1.4's composer.
+
+**B1 gate checkpoint (Ben):** launch → the inbox; open a session → Home button returns to it; the start composer has working model/effort/Auto chips; **picking a primary + an extra folder starts one session across both** (row 33); typing on a past session and hitting send picks it back up. Plain-English asks per memory `ben-plain-english`.
 
 ---
 ---

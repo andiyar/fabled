@@ -116,6 +116,7 @@ New rows from the sprint:
 | 30 | 07-12 | **Two-level sidebar grouping** — primary axis + sub-axis (default **Date › Project**), funnel-driven | Ben: "primary sort by DATE but subsort by PROJECT." Any pair allowed. Attention/Working float above all grouping. 🎨 design-decided (extends row 6) |
 | 31 | 07-12 | **Multi-select scoped to tagging** — Pin/Archive are per-row (right-click); select-many exists only to Tag… several at once | Ben: general bulk actions "more effort than it's worth," but multi-select "makes sense for tagging." 🎨 design-decided |
 | 32 | 07-12 | **Ben's tag workload is creative/academic, not just dev** — characters, scenes, chapters, papers, lit-review | Tags must scale (searchable, counts, delete/rename); colour reserved for projects (tags plain). See memory [[ben-creative-phd-use]]. Shapes rows 13/30. |
+| 33 | 07-12 | **Dual-use / multi-folder sessions** — pick a primary folder + extra folders so one session spans e.g. manuscript + research notes, or thesis chapter + data | Ben asked while approving the home mockup (session e87008fa). Verified CLI supports `--add-dir <directories...>` (2.1.206); Fabled is single-folder today. **Added to 4c** (Ben 2026-07-12) — plan task B1.6, DECISIONS "Dual-use / multi-folder sessions". Serves creative/PhD dual-use [[ben-creative-phd-use]]. 🔨 IN FLIGHT |
 
 ## Permission hotfix — built (2026-07-12, session d97477de)
 
