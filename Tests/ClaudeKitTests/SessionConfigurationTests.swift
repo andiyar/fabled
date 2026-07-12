@@ -140,4 +140,18 @@ final class SessionConfigurationTests: XCTestCase {
         }
         XCTAssertEqual(args[args.index(after: index)], "medium")
     }
+
+    func testAdditionalDirectoriesEmitRepeatedAddDirFlags() {
+        var config = SessionConfiguration(workingDirectory: URL(fileURLWithPath: "/tmp/primary"))
+        XCTAssertFalse(config.arguments().contains("--add-dir"), "no extra dirs → no flag")
+        config.additionalDirectories = [
+            URL(fileURLWithPath: "/tmp/notes"),
+            URL(fileURLWithPath: "/tmp/data"),
+        ]
+        let args = config.arguments()
+        // one --add-dir per directory, each followed by its path
+        let addDirIndices = args.indices.filter { args[$0] == "--add-dir" }
+        XCTAssertEqual(addDirIndices.count, 2)
+        XCTAssertEqual(addDirIndices.map { args[$0 + 1] }, ["/tmp/notes", "/tmp/data"])
+    }
 }

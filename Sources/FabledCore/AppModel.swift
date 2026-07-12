@@ -234,11 +234,13 @@ public final class AppModel {
     // MARK: - Session lifecycle
 
     public func newSession(at directory: URL, model: String? = nil,
-                           firstMessage: String? = nil) async {
+                           firstMessage: String? = nil,
+                           additionalDirectories: [URL] = []) async {
         var configuration = SessionConfiguration(workingDirectory: directory)
         configuration.model = model ?? preferredModel
         configuration.effort = preferredEffort
         configuration.permissionMode = preferredPermissionMode
+        configuration.additionalDirectories = additionalDirectories
         await launch(configuration, seed: [])
         if let firstMessage, case .live(let id) = selection,
            let session = liveSessions.first(where: { $0.id == id }) {

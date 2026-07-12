@@ -28,9 +28,11 @@ struct RootView: View {
         }
         .task { await app.bootstrap() }
         .fileImporter(isPresented: $app.isPickingFolder,
-                      allowedContentTypes: [.folder]) { result in
-            if case .success(let url) = result {
-                Task { await app.newSession(at: url) }
+                      allowedContentTypes: [.folder],
+                      allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result, let primary = urls.first {
+                Task { await app.newSession(at: primary,
+                                            additionalDirectories: Array(urls.dropFirst())) }
             }
         }
         .alert("Session failed", isPresented: Binding(

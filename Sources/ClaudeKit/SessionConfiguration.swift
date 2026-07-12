@@ -15,6 +15,10 @@ public struct SessionConfiguration: Sendable {
     /// Emit Anthropic SSE deltas as `stream_event` lines. On by default:
     /// the conversation UI streams text as it generates.
     public var includePartialMessages = true
+    /// Extra roots the CLI may access, beyond `workingDirectory`, emitted as
+    /// repeated `--add-dir <path>` flags. UX-LEDGER row 33 (dual-use /
+    /// multi-folder sessions, e.g. a manuscript folder + a notes folder).
+    public var additionalDirectories: [URL] = []
     public var extraArguments: [String] = []
 
     public init(workingDirectory: URL) {
@@ -73,6 +77,7 @@ public struct SessionConfiguration: Sendable {
         if let resumeSessionID { args += ["--resume", resumeSessionID] }
         if forkSession { args.append("--fork-session") }
         if let permissionMode { args += ["--permission-mode", permissionMode] }
+        for dir in additionalDirectories { args += ["--add-dir", dir.path] }
         args += extraArguments
         return args
     }
