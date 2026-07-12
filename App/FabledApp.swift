@@ -38,7 +38,7 @@ struct FabledApp: App {
         }
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Session…") { model.isPickingFolder = true }
+                Button("Home") { model.goHome() }
                     .keyboardShortcut("n", modifiers: .command)
             }
         }

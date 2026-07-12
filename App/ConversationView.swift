@@ -2,6 +2,7 @@ import SwiftUI
 import FabledCore
 
 struct ConversationView: View {
+    @Environment(AppModel.self) private var app
     let session: ChatSession
     /// Hoisted to RootView so an open inspector survives per-session hierarchy
     /// recreation (the deliberate T6 behavior). Owned there, bound here.
@@ -155,6 +156,10 @@ struct ConversationView: View {
             if new == nil { inspectBackStack.removeAll() }
         }
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button { app.goHome() } label: { Label("Home", systemImage: "house") }
+                    .help("Back to the home inbox")
+            }
             ToolbarItemGroup {
                 if session.currentModel != nil {
                     Text(activeModelLabel)

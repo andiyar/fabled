@@ -347,4 +347,14 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(resolvedDeleted.url,
                        FileManager.default.homeDirectoryForCurrentUser)
     }
+
+    // MARK: - Home affordance (UX-LEDGER row 23)
+
+    @MainActor func testGoHomeReturnsToTheInbox() async throws {
+        let (model, _) = try makeModel(defaults: freshDefaults())
+        model.selection = .historical("abc")
+        model.goHome()
+        XCTAssertNil(model.selection)                  // Home is the inbox
+        XCTAssertFalse(model.isPickingFolder)          // NOT the folder picker
+    }
 }

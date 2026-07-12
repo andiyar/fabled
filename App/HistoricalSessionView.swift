@@ -117,6 +117,10 @@ struct HistoricalSessionView: View {
             if new == nil { inspectBackStack.removeAll() }
         }
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button { app.goHome() } label: { Label("Home", systemImage: "house") }
+                    .help("Back to the home inbox")
+            }
             ToolbarItemGroup {
                 // Independent presentation-path affordance (matches
                 // ConversationView) — verifiable without clicking a row.

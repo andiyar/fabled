@@ -314,6 +314,10 @@ public final class AppModel {
         selection = .live(id)
     }
 
+    /// Return to the attention inbox (welcome). ⌘N and the toolbar Home button call
+    /// this — the inbox is the front door, not the folder picker (UX-LEDGER row 23).
+    public func goHome() { selection = nil; isPickingFolder = false }
+
     /// Test seam: registers a live session without spawning a process.
     public func adoptForTesting(_ session: ChatSession) {
         liveSessions.append(session)
