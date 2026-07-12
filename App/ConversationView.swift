@@ -130,6 +130,9 @@ struct ConversationView: View {
             // The composer bar draws its own top hairline (matching the locked
             // mockup's single separator) — no extra Divider here.
             ComposerView(session: session)
+            // Read-only git strip under the composer, spanning full width:
+            // branch · ±diff · cost. Hides itself for a non-repo session.
+            GitFooterStrip(session: session)
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
