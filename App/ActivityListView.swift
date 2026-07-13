@@ -15,13 +15,13 @@ struct ActivityListView: View {
     /// The header's "Clear". nil hides it.
     var onClear: (() -> Void)? = nil
 
-    private var rows: [ActivityRow] {
-        ActivityList.rows(timeline: timeline, subagents: subagents)
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        // Derive the list ONCE per render, then pass the array + its count down.
+        // The header count, the empty check, and the ForEach all read this same
+        // value instead of re-running ActivityList.rows three times per body.
+        let rows = ActivityList.rows(timeline: timeline, subagents: subagents)
+        return VStack(spacing: 0) {
+            header(count: rows.count)
             if rows.isEmpty {
                 empty
             } else {
@@ -39,12 +39,12 @@ struct ActivityListView: View {
     }
 
     // Bottom-hairline header: serif "Activity", a faint count, "Clear" at right.
-    private var header: some View {
+    private func header(count: Int) -> some View {
         HStack(spacing: 9) {
             Text("Activity")
                 .font(.system(size: 14, design: .serif).weight(.semibold))
                 .foregroundStyle(Theme.ink)
-            Text("\(rows.count)")
+            Text("\(count)")
                 .font(.system(size: 11).weight(.semibold))
                 .foregroundStyle(Theme.faint)
                 .monospacedDigit()
@@ -98,11 +98,19 @@ private struct ActivityRowView: View {
                     .font(.system(size: 12.5).weight(.semibold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
-                    .truncationMode(.tail)
-                subtitle
-                    .font(.system(size: 11))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    // Path-like titles (edit/read) truncate the HEAD so the
+                    // filename at the end stays visible, matching the detail view.
+                    .truncationMode(titleTruncationMode)
+                HStack(spacing: 6) {
+                    // A live row — a running tool OR a still-running subagent —
+                    // shows the pulse beside its subtitle, so an agent row keeps
+                    // its accent icon, step count, and drill chevron AND reads live.
+                    if row.isLive { PulsingLiveDot() }
+                    subtitle
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             trailing
@@ -124,15 +132,18 @@ private struct ActivityRowView: View {
         .help("Show \(row.title) in the inspector")
     }
 
-    // Live rows show a pulsing dot in place of the drill chevron.
-    @ViewBuilder private var trailing: some View {
-        if row.isLive {
-            PulsingLiveDot()
-        } else {
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.faint)
-        }
+    // Every row is drillable, so the trailing affordance is always the drill
+    // chevron; live-ness is shown by the pulse beside the subtitle instead (so a
+    // running agent keeps its chevron rather than losing it to the dot).
+    private var trailing: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Theme.faint)
+    }
+
+    // Edit/read titles are file paths — truncate the head so the filename shows.
+    private var titleTruncationMode: Text.TruncationMode {
+        (row.kind == .edit || row.kind == .read) ? .head : .tail
     }
 
     // "+N" green / "−N" red / everything else muted, so an edit row's diff
@@ -175,6 +186,8 @@ private struct ActivityRowView: View {
 }
 
 /// Small live indicator: opacity pulses 1 ↔ 0.3 forever (mockup `.livedot`).
+/// Sits inline beside the subtitle, so it carries no top padding and lets the
+/// enclosing HStack center it against the subtitle text.
 private struct PulsingLiveDot: View {
     @State private var dim = false
     var body: some View {
@@ -182,7 +195,6 @@ private struct PulsingLiveDot: View {
             .fill(Theme.live)
             .frame(width: 7, height: 7)
             .opacity(dim ? 0.3 : 1)
-            .padding(.top, 3)
             .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true),
                        value: dim)
             .onAppear { dim = true }

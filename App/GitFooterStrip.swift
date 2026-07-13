@@ -3,7 +3,7 @@ import ClaudeKit
 import FabledCore
 
 /// The quiet, read-only git strip along the very bottom of the conversation
-/// view: `branch · +added −removed · cost`. It only *reads* local git state
+/// view: `repo · branch · +added −removed · cost`. It only *reads* local git state
 /// (via `GitInfo`) — no "Create PR" button, no `gh`, no network (that was
 /// explicitly cut from v1 by Ben, 2026-07-12).
 ///
@@ -21,8 +21,13 @@ struct GitFooterStrip: View {
         Group {
             if let info {
                 HStack(spacing: Theme.spaceM) {
-                    Text(info.branch)
-                        .foregroundStyle(Theme.ink)
+                    // First segment: "<repo> · <branch>" — repo de-emphasized,
+                    // branch in ink, with a faint interior "·". One Text so the
+                    // pair reads as a single unit distinct from the wider
+                    // segment separators around it.
+                    (Text(info.repo).foregroundColor(Theme.muted)
+                     + Text(" · ").foregroundColor(Theme.faint)
+                     + Text(info.branch).foregroundColor(Theme.ink))
 
                     if info.added > 0 || info.removed > 0 {
                         separator

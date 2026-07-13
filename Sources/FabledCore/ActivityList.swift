@@ -69,12 +69,14 @@ public enum ActivityList {
         let label = title(summary: summary, name: name)
         // A subagent Task/Agent stays an agent row even once finished — its
         // identity (a whole sub-run with a step count) beats the generic
-        // tool/live shape, so this precedes the isRunning check.
+        // tool/live shape, so this precedes the isRunning check. While it is
+        // still running it also reports live, so it floats to the top with a
+        // pulse WITHOUT losing its agent shape (accent icon, step count, drill).
         if agentNames.contains(name) {
             let steps = subagents[id]?.count ?? 0
             return ActivityRow(drillID: id, kind: .agent, title: label,
                                subtitle: steps == 1 ? "1 step" : "\(steps) steps",
-                               isLive: false)
+                               isLive: isRunning)
         }
         if isRunning {
             return ActivityRow(drillID: id, kind: .live, title: label,

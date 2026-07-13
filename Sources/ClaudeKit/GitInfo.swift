@@ -9,22 +9,29 @@ import Foundation
 /// from v1 (Ben, 2026-07-12), so there is deliberately nothing here but the
 /// read.
 public struct GitInfo: Sendable, Equatable {
+    /// The working tree's name — the last path component of the repo root
+    /// (`git rev-parse --show-toplevel`). In a git *worktree* this is the
+    /// worktree's own directory name, which is acceptable for the label.
+    public let repo: String
     public let branch: String
     public let added: Int
     public let removed: Int
 
-    public init(branch: String, added: Int, removed: Int) {
+    public init(repo: String, branch: String, added: Int, removed: Int) {
+        self.repo = repo
         self.branch = branch
         self.added = added
         self.removed = removed
     }
 
-    /// Reads `git rev-parse --abbrev-ref HEAD` (branch) and `git diff
-    /// --numstat` (summed added/removed columns) in `directory`.
+    /// Reads `git rev-parse --abbrev-ref HEAD` (branch), `git rev-parse
+    /// --show-toplevel` (repo name), and `git diff HEAD --numstat` (summed
+    /// added/removed columns) in `directory`.
     ///
     /// Returns nil when `directory` is not a git repository (non-zero exit, or
-    /// `git` cannot be launched) — it never throws for "not a repo". A `-` in
-    /// a numstat count means a binary file and is treated as 0.
+    /// `git` cannot be launched) — it never throws for "not a repo". A repo with
+    /// no commits (unborn HEAD) also returns nil: the branch rev-parse exits
+    /// non-zero. A `-` in a numstat count means a binary file and is treated as 0.
     ///
     /// Shells out on a dedicated thread, off the cooperative pool: a blocking
     /// `git` read must not park a pool thread (the same scar AgentSession's
@@ -35,9 +42,23 @@ public struct GitInfo: Sendable, Equatable {
         let branch = branchRun.output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !branch.isEmpty else { return nil }
 
+        // The repo name is the working tree's last path component. Fetched with
+        // the same single-resume, off-main-actor `runGit` as every other command;
+        // a failure here → nil, matching the "any failure → nil" contract.
+        guard let topRun = await runGit(["rev-parse", "--show-toplevel"], in: directory),
+              topRun.status == 0 else { return nil }
+        let top = topRun.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !top.isEmpty else { return nil }
+        let repo = URL(fileURLWithPath: top).lastPathComponent
+
+        // `git diff HEAD --numstat` counts staged AND unstaged changes to
+        // tracked files — plain `git diff` silently drops to 0 once anything is
+        // staged. New/untracked files stay uncounted in v1 (no `git status`
+        // path, by design). An unborn HEAD makes this fail, but that case is
+        // already caught by the branch guard above, so `read` returned nil.
         var added = 0
         var removed = 0
-        if let diffRun = await runGit(["diff", "--numstat"], in: directory), diffRun.status == 0 {
+        if let diffRun = await runGit(["diff", "HEAD", "--numstat"], in: directory), diffRun.status == 0 {
             for line in diffRun.output.split(separator: "\n") {
                 // numstat is tab-separated: <added>\t<removed>\t<path>.
                 // Int("-") is nil → binary files contribute 0, as intended.
@@ -47,7 +68,7 @@ public struct GitInfo: Sendable, Equatable {
                 removed += Int(columns[1]) ?? 0
             }
         }
-        return GitInfo(branch: branch, added: added, removed: removed)
+        return GitInfo(repo: repo, branch: branch, added: added, removed: removed)
     }
 
     /// Runs `git <args>` in `directory` on a dedicated thread, returning its

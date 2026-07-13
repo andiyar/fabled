@@ -52,4 +52,66 @@ final class GitInfoTests: XCTestCase {
         let info = try await GitInfo.read(at: dir)
         XCTAssertNil(info)
     }
+
+    /// After staging a modified tracked file, the diff must STILL count its
+    /// changed lines. `git diff --numstat` (no ref) silently drops staged
+    /// changes to 0; `git diff HEAD --numstat` counts staged AND unstaged.
+    func testCountsStagedChangesToTrackedFile() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try git(["init", "-q"], in: dir)
+        try git(["config", "user.email", "t@t"], in: dir)
+        try git(["config", "user.name", "t"], in: dir)
+        try "hello\n".write(to: dir.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try git(["add", "."], in: dir)
+        try git(["commit", "-qm", "init"], in: dir)
+        // Modify AND stage the change — the old `git diff --numstat` reports 0.
+        try "hello\nworld\n".write(to: dir.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try git(["add", "a.txt"], in: dir)
+
+        let info = try await GitInfo.read(at: dir)
+        XCTAssertNotNil(info)
+        XCTAssertGreaterThanOrEqual(info?.added ?? 0, 1,
+                                    "staged changes to a tracked file must still count")
+    }
+
+    /// A repo with no commits has an unborn HEAD: `git rev-parse --abbrev-ref
+    /// HEAD` exits non-zero, so read returns nil (never crashes/hangs) even
+    /// though `git diff HEAD` would also fail.
+    func testNoCommitsRepoReturnsNil() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try git(["init", "-q"], in: dir)
+        try git(["config", "user.email", "t@t"], in: dir)
+        try git(["config", "user.name", "t"], in: dir)
+        // No commit → unborn HEAD.
+
+        let info = try await GitInfo.read(at: dir)
+        XCTAssertNil(info)
+    }
+
+    /// The repo name is the working tree's last path component (from
+    /// `git rev-parse --show-toplevel`).
+    func testReportsRepoNameFromToplevel() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try git(["init", "-q"], in: dir)
+        try git(["config", "user.email", "t@t"], in: dir)
+        try git(["config", "user.name", "t"], in: dir)
+        try "hello\n".write(to: dir.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try git(["add", "."], in: dir)
+        try git(["commit", "-qm", "init"], in: dir)
+
+        let info = try await GitInfo.read(at: dir)
+        XCTAssertNotNil(info)
+        // --show-toplevel may resolve symlinks (/var → /private/var), so compare
+        // the last path component, which is the UUID dir name either way.
+        XCTAssertEqual(info?.repo, dir.lastPathComponent)
+    }
 }
