@@ -154,6 +154,21 @@ Ben ran the B1 build on the real app. Verdict: "a good try" → after same-sessi
 
 **Deferred (Ben paused to save):** more nitpicks to come; row-37 Home L/R placement; first-cut looks to react to (pills shape, resume-effort presentation). Picked up next session before B2.
 
+## 4c B2 GATE RESULTS (2026-07-13 — Ben ran the built conversation view on his real Oni session)
+
+Phase B2 (conversation) built + gated via the implementer→review→rework triplet (8 feature/fix commits `5d74183`…`9bbe32e`; branch pushed). Row 25 (his headline grievance) was verified FIRST, then the rest. Ben, verbatim: step-grouping — "so like this you mean?" → **"oh yeah it's fine"**; composer — **"the chips are fine, the send button is fine, the model thing is fine"**; whole screen — **"looks fine."**
+
+**CLOSED by this gate (Ben verified in the build — pending the formal move into the Closed table):**
+- **25** (step grouping) — ✅ folds work on his real 22-step Oni transcript ("6 steps" / "Ran 4 commands" / "7 steps"); expand shows every step in order; count badges count tool calls only; errored edits stay out on their own. Root cause was **`thinking` between tools, not permissions** (on-disk transcripts carry no permission lines). **DECISION: narration (`.assistantText`) between steps stays a section break — the narration-fold escalation is DECLINED** (the thinking-transparency fix was sufficient; DECISIONS 2026-07-13).
+- **17** (composer-adjacent controls, conversation) — ✅ model / effort / permission chips now sit under the conversation text box. Built by **restyling the existing rich live pickers with the shared `ChipLabel`**, NOT by binding the preference-only `ComposerChips` (which would have regressed the live catalog / custom-model / model-aware effort; DECISIONS 2026-07-13). Send stays **clay** (mockup's bronze declined by Ben); model shows in both the chip and the toolbar (Ben: fine).
+- **27** (composer grows as you type) — ✅ box grows to ~8 lines then scrolls (`axis:.vertical` + `lineLimit(1...8)`), now inside the panel box.
+- **26** (right panel = clickable Activity list) — ✅ the inspector defaults to the Activity list; running rows pulse and float first, agent rows carry a step count, finished runs collapse, edits show `+N −N`; click drills into detail with **Back** to the list. Gate rulings applied: a running sub-agent now shows a **live pulse** (was a static "N steps"); edit-row titles **front-truncate** so the filename stays visible.
+- **28** (git footer strip) — ✅ quiet read-only strip: `<repo> · <branch>` · `+N −N` · cost. **Create PR omitted v1** (as locked). Gate rulings applied: shows **`repo · branch`** (was branch only); diff counts **tracked changes since the last commit** (`git diff HEAD --numstat`, was unstaged-only which blanked to 0 once anything was staged); brand-new/untracked files not counted in v1 (Ben's call).
+
+**Crash fixed mid-gate — pre-existing, NOT B2 (`de40a0f`):** `Notifier.post`'s `@MainActor`-inherited `requestAuthorization` completion closure ran on `UNUserNotificationCenter`'s background call-out queue → Swift 6 executor-assertion trap (EXC_BREAKPOINT). From the 4b notifications work (`3738655`, **on master**), latent until a notification fired on this stricter macOS 15.7.8 / Swift 6.5. Fixed via the async `requestAuthorization` API. Build-clean; **behavioral confirm deferred** (Ben: "deal with it when it happens" — a notification firing cleanly will confirm). ⚠️ **Also present on master — cherry-pick candidate.**
+
+**Deferred ("we may tweak later"):** the plain running-tool dot placement (it moved beside the subtitle + gained a drill chevron for uniformity when every running row was made to pulse). **Still-open B1 residual:** row-37 Home left/right-of-filter placement (never returned to).
+
 ---
 
 *Sources: full transcript sweep 2026-07-11 (`~/.claude/projects/-Users-andiyar-Developer-Fabled/*.jsonl`, sessions `975e1785`, `9f8443da`, `409fdeca`, `03f7002f`, `5a018155`, `2b161833`) + 4b gate 2026-07-12. Companion docs: FOLLOWUPS.md (tech riders), DECISIONS.md (scope calls), plans/2026-07-10-cd-ui-digest.md (screenshot distillation).*
